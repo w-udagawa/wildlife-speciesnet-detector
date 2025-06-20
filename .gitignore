@@ -1,0 +1,55 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+wildlife_env/
+wildlife_env_312/
+venv/
+env/
+ENV/
+.venv/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+.ropeproject
+
+# OS specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Test and temporary files
+*.log
+*.tmp
+*.temp
+test_results.json
+debug_*.json
+
+# Output directories
+results/
+output/
+
+# Large files
+*.pkl
+*.h5
+*.pth
+*.pt
+*.model
+testimages/
+sample_images/
+
+# Config files with sensitive data
+config.ini
+settings.ini
+credentials.json
+
+# Backup files (optional - uncomment if you want to exclude backups from Git)
+backups/
