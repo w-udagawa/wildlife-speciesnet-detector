@@ -1,17 +1,8 @@
-# Wildlife Detector Requirements
-# Python 3.12+
-
-# Core dependencies
-PySide6>=6.6.0
-numpy>=1.24.0
-pandas>=2.0.0
-Pillow>=10.0.0
-opencv-python>=4.8.0
-
-# AI/ML dependencies
-speciesnet>=0.1.0
-torch>=2.0.0  # If using GPU acceleration
-
-# Utilities
-python-dateutil>=2.8.2
-pytz>=2023.3
+speciesnet>=1.0.0
+PySide6>=6.5.0
+numpy>=1.21.0
+opencv-python>=4.6.0
+Pillow>=9.0.0
+pandas>=1.5.0
+tqdm>=4.64.0
+pyinstaller>=5.0.0

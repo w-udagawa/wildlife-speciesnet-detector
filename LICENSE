@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2025 Wildlife Detector Contributors
+Copyright (c) 2025 Wildlife Detector Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,41 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Third-Party Licenses
+
+This software uses the following third-party libraries:
+
+### Google SpeciesNet
+- License: Apache License 2.0
+- Copyright: Google LLC
+- URL: https://github.com/google/cameratrapai
+
+### PySide6
+- License: LGPL v3 / Commercial
+- Copyright: The Qt Company Ltd.
+- URL: https://doc.qt.io/qtforpython/
+
+### NumPy
+- License: BSD 3-Clause
+- Copyright: NumPy Developers
+- URL: https://numpy.org/
+
+### pandas
+- License: BSD 3-Clause
+- Copyright: pandas Development Team
+- URL: https://pandas.pydata.org/
+
+### Pillow
+- License: HPND (PIL Software License)
+- Copyright: PIL Contributors
+- URL: https://pillow.readthedocs.io/
+
+### OpenCV
+- License: Apache License 2.0
+- Copyright: OpenCV Contributors
+- URL: https://opencv.org/
+
+For complete license texts of all dependencies, please refer to their respective repositories.

@@ -1,0 +1,35 @@
+# 開発用依存関係 - Wildlife Detector
+
+# コード品質・フォーマット
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# テスト
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+
+# プリコミットフック
+pre-commit>=3.3.0
+
+# ドキュメント
+mkdocs>=1.5.0
+mkdocs-material>=9.2.0
+mkdocs-mermaid2-plugin>=1.1.0
+
+# セキュリティ
+bandit>=1.7.5
+safety>=2.3.0
+
+# 開発用ツール
+ipython>=8.14.0
+jupyter>=1.0.0
+
+# パフォーマンス測定
+memory-profiler>=0.61.0
+line-profiler>=4.1.0
+
+# デバッグ
+pdb++>=0.10.3
