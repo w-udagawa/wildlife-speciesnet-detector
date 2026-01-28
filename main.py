@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 
 # アプリケーションのルートディレクトリをパスに追加
-app_root = Path(__file__).parent.parent  # プロジェクトルートディレクトリ
+app_root = Path(__file__).parent  # プロジェクトルートディレクトリ
 sys.path.insert(0, str(app_root))
 
 try:
@@ -24,7 +24,7 @@ except ImportError:
     print("pip install PySide6")
     sys.exit(1)
 
-from wildlife_detector.gui.main_window import MainWindow
+from gui.main_window import MainWindow
 
 class WildlifeDetectorApp:
     """Wildlife Detector アプリケーションクラス"""

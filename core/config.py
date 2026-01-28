@@ -12,26 +12,32 @@ from dataclasses import dataclass, asdict
 @dataclass
 class AppConfig:
     """アプリケーション設定クラス"""
-    
+
     # 検出設定
     confidence_threshold: float = 0.1
     batch_size: int = 32
     country_filter: str = "JPN"
-    max_workers: int = 4
+    max_workers: int = 2  # WSL2環境向けに2に削減（旧: 4）
     use_gpu: bool = False
-    
+
     # 出力設定
     create_species_folders: bool = True
     copy_images_to_folders: bool = True
     output_csv: bool = True
-    
+
     # UI設定
     window_size: tuple = (1200, 800)
     theme: str = "default"
-    
+
     # 高度な設定
     max_image_size: tuple = (1920, 1080)
     processing_timeout: int = 300  # 5分
+
+    # 大量画像処理向けメモリ管理設定
+    intermediate_save_interval: int = 100  # 中間保存間隔（枚数）
+    gc_interval: int = 50  # ガベージコレクション間隔（枚数）
+    consecutive_error_limit: int = 3  # 連続エラー上限（この回数超えると処理中断）
+    subprocess_timeout: int = 600  # subprocess タイムアウト（秒）- 旧: 300
     
     @classmethod
     def get_default(cls) -> 'AppConfig':

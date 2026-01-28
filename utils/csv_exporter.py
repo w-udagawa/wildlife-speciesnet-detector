@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import List, Dict, Any
 import logging
 
-from wildlife_detector.core.species_detector import DetectionResult
-from wildlife_detector.core.batch_processor import ProcessingStats
+from core.species_detector import DetectionResult
+from core.batch_processor import ProcessingStats
 
 class CSVExporter:
     """CSV出力クラス"""

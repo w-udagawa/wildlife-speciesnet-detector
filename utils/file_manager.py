@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 import logging
 
-from wildlife_detector.core.species_detector import DetectionResult
+from core.species_detector import DetectionResult
 
 class FileManager:
     """ファイル管理クラス"""

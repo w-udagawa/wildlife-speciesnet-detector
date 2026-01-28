@@ -18,11 +18,11 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QPixmap, QIcon
 
-from wildlife_detector.core.config import ConfigManager, AppConfig
-from wildlife_detector.core.batch_processor import BatchProcessor, ProcessingStats
-from wildlife_detector.core.species_detector import DetectionResult
-from wildlife_detector.utils.csv_exporter import CSVExporter
-from wildlife_detector.utils.file_manager import FileManager
+from core.config import ConfigManager, AppConfig
+from core.batch_processor import BatchProcessor, ProcessingStats
+from core.species_detector import DetectionResult
+from utils.csv_exporter import CSVExporter
+from utils.file_manager import FileManager
 
 class ProcessingThread(QThread):
     """バッチ処理用スレッド"""

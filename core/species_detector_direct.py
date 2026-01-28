@@ -1,8 +1,14 @@
 """
 SpeciesNet直接統合クラス（修正版）
 subprocess実行の問題を解決
+
+改善履歴:
+- subprocess出力をファイルにリダイレクト（メモリ節約）
+- タイムアウト設定を設定ファイルから取得
+- 定期的なガベージコレクション追加
 """
 import os
+import gc
 import sys
 import json
 import subprocess
@@ -52,17 +58,23 @@ class SpeciesDetectorDirect:
         self.error_message = ""
         self.use_mock = False
         self.speciesnet_available = True
-        
+
         # ログ設定
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
-        
+
         # 設定値
         self.country = getattr(config, 'country', 'JPN') if config else 'JPN'
+        self.country = getattr(config, 'country_filter', self.country) if config else self.country
         self.confidence_threshold = getattr(config, 'confidence_threshold', 0.3) if config else 0.3
-        self.timeout = getattr(config, 'timeout', 300) if config else 300
-        
-        self.logger.info("🚀 SpeciesNet直接統合モード（修正版）")
+        # subprocess_timeout設定から取得（デフォルト600秒に延長）
+        self.timeout = getattr(config, 'subprocess_timeout', 600) if config else 600
+
+        # メモリ管理用カウンター
+        self._process_count = 0
+        self._gc_interval = getattr(config, 'gc_interval', 50) if config else 50
+
+        self.logger.info("🚀 SpeciesNet直接統合モード（メモリ最適化版）")
     
     def initialize(self) -> bool:
         """SpeciesNetモデルを初期化"""
@@ -160,7 +172,7 @@ class SpeciesDetectorDirect:
     
     def _initialize_mock(self) -> bool:
         """モックモード初期化"""
-        from wildlife_detector.core.species_detector_subprocess import MockSpeciesNet
+        from core.species_detector_subprocess import MockSpeciesNet
         self.model = MockSpeciesNet()
         self.logger.info("📝 モックモード初期化完了")
         self.is_initialized = True
@@ -189,23 +201,31 @@ class SpeciesDetectorDirect:
             return DetectionResult(image_path, [])
     
     def _detect_with_speciesnet_direct(self, image_path: str) -> DetectionResult:
-        """SpeciesNet直接実行による検出（修正版）"""
+        """SpeciesNet直接実行による検出（メモリ最適化版）"""
         try:
             self.logger.info(f"🔍 SpeciesNet直接実行: {os.path.basename(image_path)}")
-            
+
+            # 定期的なメモリ管理
+            self._process_count += 1
+            if self._process_count % self._gc_interval == 0:
+                self._manage_memory()
+
             # 一時ディレクトリとファイルの作成
             with tempfile.TemporaryDirectory() as temp_dir:
                 # 画像を一時ディレクトリにコピー
                 temp_image_path = os.path.join(temp_dir, os.path.basename(image_path))
                 import shutil
                 shutil.copy2(image_path, temp_image_path)
-                
+
                 # 出力ファイル
                 output_file = os.path.join(temp_dir, 'predictions.json')
-                
+                # subprocess出力用ファイル（メモリ節約のためcapture_outputを使わない）
+                stdout_file = os.path.join(temp_dir, 'stdout.log')
+                stderr_file = os.path.join(temp_dir, 'stderr.log')
+
                 # 環境変数を完全コピー
                 env = os.environ.copy()
-                
+
                 # SpeciesNet実行コマンド
                 cmd = [
                     sys.executable, '-m', 'speciesnet.scripts.run_model',
@@ -214,42 +234,57 @@ class SpeciesDetectorDirect:
                     '--country', self.country,
                     '--batch_size', '1'
                 ]
-                
-                self.logger.info(f"📍 実行コマンド: {' '.join(cmd)}")
-                
+
+                self.logger.debug(f"📍 実行コマンド: {' '.join(cmd)}")
+
                 # 作業ディレクトリを明示的に設定
                 working_dir = os.getcwd()
-                
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                    cwd=working_dir,
-                    env=env
-                )
-                
+
+                # ファイルに出力をリダイレクト（メモリ節約）
+                with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=stdout_f,
+                        stderr=stderr_f,
+                        timeout=self.timeout,
+                        cwd=working_dir,
+                        env=env
+                    )
+
                 if result.returncode == 0 and os.path.exists(output_file):
                     # 結果ファイルの読み込み
                     with open(output_file, 'r', encoding='utf-8') as f:
                         results_data = json.load(f)
-                    
+
                     # 対象画像の結果を抽出（修正版）
                     detections = self._extract_detections_for_image(results_data, image_path)
-                    
+
                     self.logger.info(f"✅ SpeciesNet検出完了: {len(detections)}個の結果")
                     return DetectionResult(image_path, detections)
                 else:
                     self.logger.warning(f"⚠️ SpeciesNet実行失敗 (code: {result.returncode})")
-                    if result.stderr:
-                        self.logger.warning(f"エラー出力:\n{result.stderr}")
+                    # エラー出力をファイルから読み込み（必要な場合のみ）
+                    if os.path.exists(stderr_file):
+                        with open(stderr_file, 'r') as f:
+                            stderr_content = f.read()
+                            if stderr_content:
+                                # エラー出力は最初の500文字のみログ出力（メモリ節約）
+                                self.logger.warning(f"エラー出力:\n{stderr_content[:500]}")
                     return DetectionResult(image_path, [])
-                    
+
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"❌ SpeciesNetタイムアウト ({self.timeout}秒): {os.path.basename(image_path)}")
+            return DetectionResult(image_path, [])
         except Exception as e:
             self.logger.error(f"❌ SpeciesNet直接実行エラー: {str(e)}")
             import traceback
             traceback.print_exc()
             return DetectionResult(image_path, [])
+
+    def _manage_memory(self):
+        """メモリ管理（ガベージコレクション実行）"""
+        gc.collect()
+        self.logger.debug(f"メモリ解放実行 (処理済み: {self._process_count}枚)")
     
     def _extract_detections_for_image(self, results_data: Any, target_image_path: str) -> List[Dict[str, Any]]:
         """結果データから対象画像の検出結果を抽出（修正版）"""
@@ -372,7 +407,7 @@ class SpeciesDetectorDirect:
     
     def _detect_with_mock(self, image_path: str) -> DetectionResult:
         """モックモードでの検出"""
-        from wildlife_detector.core.species_detector_subprocess import MockSpeciesNet
+        from core.species_detector_subprocess import MockSpeciesNet
         
         # 画像の読み込み
         try:
@@ -434,10 +469,12 @@ class SpeciesDetectorDirect:
             'species_net_available': self.speciesnet_available,
             'initialized': self.is_initialized,
             'supported_species_count': 2000 if not self.use_mock else 10,
-            'version': 'SpeciesNet Direct Integration v1.0 (Fixed)',
+            'version': 'SpeciesNet Direct Integration v1.1 (Memory Optimized)',
             'country': self.country,
             'confidence_threshold': self.confidence_threshold,
-            'timeout': self.timeout
+            'timeout': self.timeout,
+            'gc_interval': self._gc_interval,
+            'process_count': self._process_count
         }
 
 # 下位互換性のためのエイリアス
