@@ -1,11 +1,17 @@
 """
-SpeciesNet直接統合クラス（修正版）
-subprocess実行の問題を解決
+SpeciesNet直接統合モジュール
+
+Google SpeciesNetを使用した野生生物検出機能を提供します。
+subprocessを通じてSpeciesNetを実行し、結果を解析します。
+
+主要クラス:
+    - DetectionResult: 検出結果を格納するデータクラス
+    - SpeciesDetectorDirect: SpeciesNet検出器の実装
 
 改善履歴:
-- subprocess出力をファイルにリダイレクト（メモリ節約）
-- タイムアウト設定を設定ファイルから取得
-- 定期的なガベージコレクション追加
+    v1.0: 初期実装
+    v1.1: subprocess出力をファイルにリダイレクト（メモリ節約）
+    v1.2: モックモード削除、エラーハンドリング強化
 """
 import os
 import gc
@@ -51,12 +57,11 @@ class DetectionResult:
 
 class SpeciesDetectorDirect:
     """SpeciesNet直接統合クラス（subprocess実行修正版）"""
-    
+
     def __init__(self, config=None):
         self.config = config
         self.is_initialized = False
         self.error_message = ""
-        self.use_mock = False
         self.speciesnet_available = True
 
         # ログ設定
@@ -80,22 +85,23 @@ class SpeciesDetectorDirect:
         """SpeciesNetモデルを初期化"""
         try:
             self.logger.info("🔧 SpeciesNet実装モード初期化中...")
-            
+
             # 手動実行成功を確認
             if self._verify_speciesnet_working():
                 self.logger.info("✅ SpeciesNet手動実行成功確認済み")
                 self.is_initialized = True
                 return True
             else:
-                self.logger.warning("⚠️ SpeciesNet手動実行確認失敗、モックモードにフォールバック")
-                self.use_mock = True
-                return self._initialize_mock()
-            
+                self.error_message = "SpeciesNetの初期化に失敗しました。SpeciesNetが正しくインストールされているか確認してください。"
+                self.logger.error(f"❌ {self.error_message}")
+                self.speciesnet_available = False
+                return False
+
         except Exception as e:
             self.error_message = f"初期化エラー: {str(e)}"
-            self.logger.error(self.error_message)
-            self.use_mock = True
-            return self._initialize_mock()
+            self.logger.error(f"❌ {self.error_message}")
+            self.speciesnet_available = False
+            return False
     
     def _verify_speciesnet_working(self) -> bool:
         """SpeciesNet動作確認（修正版）"""
@@ -170,34 +176,18 @@ class SpeciesDetectorDirect:
             traceback.print_exc()
             return False
     
-    def _initialize_mock(self) -> bool:
-        """モックモード初期化"""
-        from core.species_detector_subprocess import MockSpeciesNet
-        self.model = MockSpeciesNet()
-        self.logger.info("📝 モックモード初期化完了")
-        self.is_initialized = True
-        return True
-    
     def detect_single_image(self, image_path: str) -> DetectionResult:
         """単一画像の検出処理（修正版）"""
         if not self.is_initialized:
             if not self.initialize():
+                self.logger.error(f"❌ SpeciesNet未初期化のため検出をスキップ: {os.path.basename(image_path)}")
                 return DetectionResult(image_path, [])
-        
+
         try:
-            if self.use_mock:
-                return self._detect_with_mock(image_path)
-            else:
-                return self._detect_with_speciesnet_direct(image_path)
-            
+            return self._detect_with_speciesnet_direct(image_path)
+
         except Exception as e:
             self.logger.error(f"検出エラー {image_path}: {str(e)}")
-            
-            if not self.use_mock:
-                self.logger.info("🔄 エラーによりモックモードにフォールバック...")
-                self.use_mock = True
-                return self.detect_single_image(image_path)
-            
             return DetectionResult(image_path, [])
     
     def _detect_with_speciesnet_direct(self, image_path: str) -> DetectionResult:
@@ -403,40 +393,6 @@ class SpeciesDetectorDirect:
         except Exception:
             return []
     
-
-    
-    def _detect_with_mock(self, image_path: str) -> DetectionResult:
-        """モックモードでの検出"""
-        from core.species_detector_subprocess import MockSpeciesNet
-        
-        # 画像の読み込み
-        try:
-            with Image.open(image_path) as img:
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                image_array = np.array(img)
-        except Exception:
-            return DetectionResult(image_path, [])
-        
-        # モック検出実行
-        mock_model = MockSpeciesNet()
-        results = mock_model.predict(image_array)
-        
-        detections = []
-        for detection in results.get('detections', []):
-            confidence = detection.get('confidence', 0)
-            if confidence >= self.confidence_threshold:
-                detections.append({
-                    'species': detection.get('species', 'Unknown'),
-                    'common_name': detection.get('common_name', ''),
-                    'scientific_name': detection.get('scientific_name', ''),
-                    'confidence': confidence,
-                    'bbox': detection.get('bbox', []),
-                    'category': detection.get('category', '')
-                })
-        
-        return DetectionResult(image_path, detections)
-    
     def detect_batch(self, image_paths: List[str], progress_callback=None) -> List[DetectionResult]:
         """バッチ処理での検出"""
         if not self.is_initialized:
@@ -465,11 +421,11 @@ class SpeciesDetectorDirect:
     def get_model_info(self) -> Dict[str, Any]:
         """モデル情報を取得"""
         return {
-            'mode': 'mock' if self.use_mock else 'direct_speciesnet',
+            'mode': 'direct_speciesnet',
             'species_net_available': self.speciesnet_available,
             'initialized': self.is_initialized,
-            'supported_species_count': 2000 if not self.use_mock else 10,
-            'version': 'SpeciesNet Direct Integration v1.1 (Memory Optimized)',
+            'supported_species_count': 2000,
+            'version': 'SpeciesNet Direct Integration v1.2 (Memory Optimized)',
             'country': self.country,
             'confidence_threshold': self.confidence_threshold,
             'timeout': self.timeout,

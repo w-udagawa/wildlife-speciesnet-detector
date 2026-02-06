@@ -1,11 +1,23 @@
 """
 Wildlife Detector バッチ処理モジュール
-大量画像の効率的な処理を管理
+
+大量画像の効率的なバッチ処理を管理します。
+ストリーミング処理パターンにより、数万枚の画像でもメモリ使用量を一定に保ちます。
+
+主要クラス:
+    - ProcessingStats: 処理統計情報を管理
+    - BatchProcessor: バッチ処理の実行を管理
+
+機能:
+    - マルチスレッド処理（ThreadPoolExecutor使用）
+    - 中間結果のCSV保存とメモリ解放
+    - 連続エラー時の自動中断
+    - 進捗コールバックによるUI連携
 
 改善履歴:
-- メモリ管理強化: 定期的なgc.collect()、中間結果保存
-- 連続エラー時の処理中断ロジック追加
-- ワーカー数削減（WSL2環境対応）
+    v1.0: 初期実装
+    v1.1: メモリ管理強化（gc.collect()、中間結果保存）
+    v1.2: ストリーミング処理パターン導入
 """
 import os
 import gc
@@ -37,7 +49,6 @@ class ProcessingStats:
         self.processing_rate = 0.0
         self.estimated_remaining = 0.0
         self.consecutive_errors = 0  # 連続エラーカウンター
-        self.last_intermediate_save = 0  # 最後の中間保存時の処理枚数
         
     def update(self, processed: int, successful: int, failed: int, current_file: str = ""):
         """統計を更新"""
@@ -98,8 +109,7 @@ class BatchProcessor:
         self.intermediate_save_interval = getattr(config, 'intermediate_save_interval', 100) if config else 100
         self.consecutive_error_limit = getattr(config, 'consecutive_error_limit', 3) if config else 3
 
-        # 中間保存用
-        self.intermediate_results = []
+        # 結果CSV保存パス
         self.intermediate_save_path = None
     
     def set_progress_callback(self, callback: Callable[[float, str, ProcessingStats], None]):
@@ -128,38 +138,51 @@ class BatchProcessor:
             self.logger.error(f"画像検索エラー: {str(e)}")
             return []
     
-    def process_images(self, image_paths: List[str], output_dir: Optional[str] = None) -> List[DetectionResult]:
-        """画像リストをバッチ処理（メモリ管理強化版）"""
+    def process_images(self, image_paths: List[str], output_dir: Optional[str] = None) -> Dict[str, Any]:
+        """画像リストをバッチ処理（ストリーミング版 - メモリ効率化）
+
+        Returns:
+            Dict[str, Any]: 処理サマリー情報
+                - total_processed: 処理画像数
+                - successful: 検出成功数
+                - failed: 検出失敗数
+                - csv_path: 結果CSVパス
+                - stopped: 処理が中断されたか
+        """
         if not image_paths:
             self.logger.warning("処理する画像がありません")
-            return []
+            return {'total_processed': 0, 'successful': 0, 'failed': 0, 'csv_path': None, 'stopped': False}
 
         # 初期化
         self.is_running = True
         self.stop_requested = False
         self.stats = ProcessingStats()
         self.stats.total_images = len(image_paths)
-        self.intermediate_results = []
 
         # 中間保存パスの設定
         if output_dir:
-            self.intermediate_save_path = Path(output_dir) / f"intermediate_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            self.intermediate_save_path = Path(output_dir) / f"detection_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         else:
-            self.intermediate_save_path = Path(f"intermediate_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+            self.intermediate_save_path = Path(f"detection_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")\
 
         # 検出器の初期化
         if not self._initialize_detector():
-            return []
+            return {'total_processed': 0, 'successful': 0, 'failed': 0, 'csv_path': None, 'stopped': False}
 
-        results = []
+        # ストリーミング用バッファ（メモリ解放のため）
+        result_buffer = []
+        total_processed = 0
+        total_successful = 0
+        total_failed = 0
 
         try:
             # 設定から最大ワーカー数を取得（デフォルト2に削減）
             max_workers = getattr(self.config, 'max_workers', 2) if self.config else 2
             max_workers = min(max_workers, len(image_paths))  # 画像数を超えないように
 
-            self.logger.info(f"バッチ処理開始: {len(image_paths)} 画像, {max_workers} ワーカー")
+            self.logger.info(f"バッチ処理開始（ストリーミングモード）: {len(image_paths)} 画像, {max_workers} ワーカー")
             self.logger.info(f"メモリ管理: GC間隔={self.gc_interval}枚, 中間保存間隔={self.intermediate_save_interval}枚")
+            self.logger.info(f"結果CSV: {self.intermediate_save_path}")
 
             # マルチスレッド処理
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -179,34 +202,39 @@ class BatchProcessor:
 
                     try:
                         result = future.result()
-                        results.append(result)
+                        result_buffer.append(result)
+                        total_processed += 1
 
-                        # 統計更新
-                        processed = len(results)
-                        successful = sum(1 for r in results if r.has_detections())
-                        failed = processed - successful
-
-                        self.stats.update(processed, successful, failed, image_path)
-
-                        # 連続エラーリセット（成功時）
+                        # 成功/失敗カウント
                         if result.has_detections():
+                            total_successful += 1
                             self.stats.consecutive_errors = 0
                         else:
+                            total_failed += 1
                             self.stats.consecutive_errors += 1
+
+                        # 統計更新
+                        self.stats.update(total_processed, total_successful, total_failed, image_path)
 
                         # 連続エラーチェック
                         if self.stats.consecutive_errors >= self.consecutive_error_limit:
                             self.logger.error(f"連続エラー上限({self.consecutive_error_limit}回)に到達。処理を中断します。")
                             self.stop_requested = True
+                            # バッファに残っている分を保存してから終了
+                            if result_buffer:
+                                self._save_buffer_to_csv(result_buffer)
                             break
 
-                        # 定期的なガベージコレクション
-                        if processed % self.gc_interval == 0:
-                            self._manage_memory(processed)
+                        # 中間保存 + メモリ解放
+                        if len(result_buffer) >= self.intermediate_save_interval:
+                            self._save_buffer_to_csv(result_buffer)
+                            result_buffer = []  # バッファクリア
+                            gc.collect()  # ガベージコレクション
+                            self.logger.info(f"メモリ解放実行 (処理済み: {total_processed}枚)")
 
-                        # 中間保存
-                        if processed % self.intermediate_save_interval == 0:
-                            self._save_intermediate_results(results)
+                        # 定期的なガベージコレクション（バッファクリアとは別に）
+                        elif total_processed % self.gc_interval == 0:
+                            gc.collect()
 
                         # 進捗コールバック呼び出し
                         if self.progress_callback:
@@ -214,35 +242,46 @@ class BatchProcessor:
                             self.progress_callback(progress, image_path, self.stats)
 
                         self.logger.debug(f"処理完了: {os.path.basename(image_path)} "
-                                         f"({processed}/{len(image_paths)})")
+                                         f"({total_processed}/{len(image_paths)})")
 
                     except Exception as e:
                         self.logger.error(f"画像処理エラー {image_path}: {str(e)}")
                         self.stats.consecutive_errors += 1
+                        total_processed += 1
+                        total_failed += 1
 
                         # 連続エラーチェック
                         if self.stats.consecutive_errors >= self.consecutive_error_limit:
                             self.logger.error(f"連続エラー上限({self.consecutive_error_limit}回)に到達。処理を中断します。")
                             self.stop_requested = True
+                            if result_buffer:
+                                self._save_buffer_to_csv(result_buffer)
                             break
 
                         # エラーコールバック
                         if self.error_callback:
                             self.error_callback(image_path, str(e))
 
-                        # エラーでも結果を追加（空の結果）
-                        results.append(DetectionResult(image_path, []))
+                        # エラーでも結果をバッファに追加（空の結果）
+                        result_buffer.append(DetectionResult(image_path, []))
 
-            # 最終保存
-            if results:
-                self._save_intermediate_results(results, final=True)
+            # 残りのバッファを保存
+            if result_buffer:
+                self._save_buffer_to_csv(result_buffer, final=True)
+                result_buffer = []
 
-            self.logger.info(f"バッチ処理完了: {len(results)} 画像処理, "
-                            f"{self.stats.successful_detections} 成功, "
-                            f"{self.stats.failed_images} 失敗")
+            self.logger.info(f"バッチ処理完了: {total_processed} 画像処理, "
+                            f"{total_successful} 成功, "
+                            f"{total_failed} 失敗")
 
         except Exception as e:
             self.logger.error(f"バッチ処理エラー: {str(e)}")
+            # エラー時も残りのバッファを保存
+            if result_buffer:
+                try:
+                    self._save_buffer_to_csv(result_buffer, final=True)
+                except Exception:
+                    pass
 
         finally:
             self.is_running = False
@@ -250,21 +289,19 @@ class BatchProcessor:
             # 最終ガベージコレクション
             gc.collect()
 
-        return results
+        # サマリー情報を返す（メモリ節約のため全結果は返さない）
+        return {
+            'total_processed': total_processed,
+            'successful': total_successful,
+            'failed': total_failed,
+            'csv_path': str(self.intermediate_save_path) if self.intermediate_save_path.exists() else None,
+            'stopped': self.stop_requested
+        }
 
-    def _manage_memory(self, processed_count: int):
-        """メモリ管理（定期的なガベージコレクション）"""
-        gc.collect()
-        self.logger.info(f"メモリ解放実行 (処理済み: {processed_count}枚)")
-
-    def _save_intermediate_results(self, results: List[DetectionResult], final: bool = False):
-        """中間結果をCSVに保存"""
+    def _save_buffer_to_csv(self, buffer: List[DetectionResult], final: bool = False):
+        """バッファ内の結果をCSVに保存（ストリーミング用）"""
         try:
-            # 前回保存以降の新しい結果のみを取得
-            start_idx = self.stats.last_intermediate_save
-            new_results = results[start_idx:]
-
-            if not new_results:
+            if not buffer:
                 return
 
             # CSVに追記
@@ -282,7 +319,7 @@ class BatchProcessor:
                     ])
 
                 # データ書き込み
-                for result in new_results:
+                for result in buffer:
                     if result.has_detections():
                         best = result.get_best_detection()
                         writer.writerow([
@@ -303,12 +340,11 @@ class BatchProcessor:
                             result.timestamp.isoformat()
                         ])
 
-            self.stats.last_intermediate_save = len(results)
             save_type = "最終" if final else "中間"
-            self.logger.info(f"{save_type}結果保存: {self.intermediate_save_path} ({len(new_results)}件追加)")
+            self.logger.info(f"{save_type}結果保存: {self.intermediate_save_path} ({len(buffer)}件追加)")
 
         except Exception as e:
-            self.logger.error(f"中間結果保存エラー: {str(e)}")
+            self.logger.error(f"結果保存エラー: {str(e)}")
     
     def _initialize_detector(self) -> bool:
         """検出器の初期化"""

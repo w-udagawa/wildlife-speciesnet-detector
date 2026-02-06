@@ -1,8 +1,20 @@
 """
 Wildlife Detector ファイル管理モジュール
-検出結果に基づくファイル振り分け機能
+
+検出結果に基づいて画像ファイルを種別フォルダに振り分けます。
+CSVベースのストリーミング処理に対応し、メモリ効率を最適化しています。
+
+主要クラス:
+    - FileManager: ファイル振り分けと管理
+
+機能:
+    - 検出結果に基づく種別フォルダ作成
+    - ファイルのコピー/移動
+    - CSVからの直接振り分け（ストリーミング対応）
+    - 振り分けサマリーの生成
 """
 import os
+import csv
 import shutil
 import json
 from pathlib import Path
@@ -10,7 +22,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 import logging
 
-from core.species_detector import DetectionResult
+from core.species_detector_direct import DetectionResult
 
 class FileManager:
     """ファイル管理クラス"""
@@ -76,11 +88,74 @@ class FileManager:
             
             self.logger.info(f"ファイル振り分け完了: {len(organization_map)} フォルダ作成")
             return organization_map
-            
+
         except Exception as e:
             self.logger.error(f"ファイル振り分けエラー: {str(e)}")
             raise
-    
+
+    def organize_images_by_species_from_csv(self, csv_path: str,
+                                           copy_files: bool = True) -> Dict[str, List[str]]:
+        """CSVファイルから検出結果を読み込み、画像ファイルを種別フォルダに振り分け（ストリーミング版）"""
+        organization_map = {}
+        operation = "コピー" if copy_files else "移動"
+
+        self.logger.info(f"ファイル{operation}による振り分けを開始（CSVベース）...")
+        self.logger.info(f"ソースCSV: {csv_path}")
+
+        try:
+            # CSVを1行ずつ読み込んで処理（メモリ効率化）
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+
+                for row in reader:
+                    image_path = row.get('image_path', '')
+                    source_path = Path(image_path)
+
+                    if not source_path.exists():
+                        self.logger.warning(f"ソースファイルが存在しません: {source_path}")
+                        continue
+
+                    species_name = row.get('species', '')
+                    common_name = row.get('common_name', '')
+
+                    if species_name:
+                        # 検出された場合
+                        folder_name = self._create_safe_folder_name(species_name, common_name)
+                    else:
+                        # 検出されなかった場合
+                        folder_name = "未検出_No_Detection"
+
+                    # 出力フォルダの作成
+                    species_folder = self.base_output_dir / folder_name
+                    species_folder.mkdir(parents=True, exist_ok=True)
+
+                    # ファイル名の衝突回避
+                    dest_path = self._get_unique_destination_path(species_folder, source_path.name)
+
+                    # ファイルのコピーまたは移動
+                    try:
+                        if copy_files:
+                            shutil.copy2(source_path, dest_path)
+                            self.logger.debug(f"コピー: {source_path.name} -> {folder_name}/")
+                        else:
+                            shutil.move(str(source_path), str(dest_path))
+                            self.logger.debug(f"移動: {source_path.name} -> {folder_name}/")
+
+                        # 組織化マップに追加
+                        if folder_name not in organization_map:
+                            organization_map[folder_name] = []
+                        organization_map[folder_name].append(str(dest_path))
+
+                    except Exception as e:
+                        self.logger.error(f"ファイル{operation}エラー {source_path}: {str(e)}")
+
+            self.logger.info(f"ファイル振り分け完了: {len(organization_map)} フォルダ作成")
+            return organization_map
+
+        except Exception as e:
+            self.logger.error(f"ファイル振り分けエラー: {str(e)}")
+            raise
+
     def _create_safe_folder_name(self, species_name: str, common_name: str) -> str:
         """安全なフォルダ名を作成"""
         # 無効な文字を置換

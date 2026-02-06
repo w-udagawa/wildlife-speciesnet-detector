@@ -53,3 +53,7 @@ credentials.json
 
 # Backup files (optional - uncomment if you want to exclude backups from Git)
 backups/
+
+# Test files
+test_app.py
+run_test.bat

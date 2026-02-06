@@ -1,16 +1,27 @@
 """
 Wildlife Detector CSV出力モジュール
-検出結果をCSV形式で出力
+
+検出結果をCSV形式で出力します。
+既存のCSVファイルからサマリーを生成する機能も提供します。
+
+主要クラス:
+    - CSVExporter: CSV出力機能
+
+機能:
+    - 検出結果の詳細CSV出力
+    - 処理サマリーの生成
+    - 種リストの出力
+    - CSVベースのサマリー生成（ストリーミング対応）
 """
 import csv
 import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
-from core.species_detector import DetectionResult
+from core.species_detector_direct import DetectionResult
 from core.batch_processor import ProcessingStats
 
 class CSVExporter:
@@ -185,11 +196,124 @@ class CSVExporter:
             
             self.logger.info(f"サマリー出力完了: {summary_path}")
             return str(summary_path)
-            
+
         except Exception as e:
             self.logger.error(f"サマリー出力エラー: {str(e)}")
             raise
-    
+
+    def export_summary_from_csv(self, source_csv_path: str, stats: ProcessingStats) -> str:
+        """CSVファイルからサマリー情報を生成して出力（ストリーミング版）"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        summary_filename = f"wildlife_detection_summary_{timestamp}.csv"
+        summary_path = self.output_dir / summary_filename
+
+        try:
+            # 統計情報の計算（CSVを1行ずつ読み込み）
+            total_images = 0
+            detected_images = 0
+            total_detections = 0
+            species_count = {}
+            category_count = {}
+            confidence_ranges = {
+                '0.9-1.0 (非常に高い)': 0,
+                '0.7-0.9 (高い)': 0,
+                '0.5-0.7 (中程度)': 0,
+                '0.3-0.5 (低い)': 0,
+                '0.0-0.3 (非常に低い)': 0
+            }
+
+            with open(source_csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+
+                for row in reader:
+                    total_images += 1
+                    species = row.get('species', '')
+                    category = row.get('category', '')
+                    confidence_str = row.get('confidence', '0')
+
+                    try:
+                        confidence = float(confidence_str)
+                    except ValueError:
+                        confidence = 0
+
+                    if species:
+                        detected_images += 1
+                        total_detections += 1
+                        species_count[species] = species_count.get(species, 0) + 1
+
+                        if category:
+                            category_count[category] = category_count.get(category, 0) + 1
+
+                        # 信頼度範囲の集計
+                        if confidence >= 0.9:
+                            confidence_ranges['0.9-1.0 (非常に高い)'] += 1
+                        elif confidence >= 0.7:
+                            confidence_ranges['0.7-0.9 (高い)'] += 1
+                        elif confidence >= 0.5:
+                            confidence_ranges['0.5-0.7 (中程度)'] += 1
+                        elif confidence >= 0.3:
+                            confidence_ranges['0.3-0.5 (低い)'] += 1
+                        else:
+                            confidence_ranges['0.0-0.3 (非常に低い)'] += 1
+
+            # サマリーCSVの出力
+            with open(summary_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+
+                # ヘッダー
+                writer.writerow(['Wildlife Detection Summary Report'])
+                writer.writerow(['Generated:', datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+                writer.writerow(['Source CSV:', source_csv_path])
+                writer.writerow([])
+
+                # 基本統計
+                writer.writerow(['基本統計'])
+                writer.writerow(['項目', '値'])
+                writer.writerow(['総画像数', total_images])
+                writer.writerow(['検出成功画像数', detected_images])
+                writer.writerow(['検出失敗画像数', total_images - detected_images])
+                writer.writerow(['総検出数', total_detections])
+                writer.writerow(['成功率 (%)', f"{(detected_images/total_images*100):.1f}" if total_images > 0 else "0"])
+                writer.writerow(['処理時間 (秒)', f"{stats.get_elapsed_time():.1f}"])
+                writer.writerow(['処理速度 (画像/秒)', f"{stats.get_processing_rate():.2f}"])
+                writer.writerow([])
+
+                # 種別統計
+                if species_count:
+                    writer.writerow(['検出種別統計'])
+                    writer.writerow(['種名', '検出回数', '割合 (%)'])
+
+                    sorted_species = sorted(species_count.items(), key=lambda x: x[1], reverse=True)
+                    for species, count in sorted_species:
+                        percentage = (count / total_detections * 100) if total_detections > 0 else 0
+                        writer.writerow([species, count, f"{percentage:.1f}"])
+                    writer.writerow([])
+
+                # カテゴリ統計
+                if category_count:
+                    writer.writerow(['カテゴリ別統計'])
+                    writer.writerow(['カテゴリ', '検出回数', '割合 (%)'])
+
+                    sorted_categories = sorted(category_count.items(), key=lambda x: x[1], reverse=True)
+                    for category, count in sorted_categories:
+                        percentage = (count / total_detections * 100) if total_detections > 0 else 0
+                        writer.writerow([category, count, f"{percentage:.1f}"])
+                    writer.writerow([])
+
+                # 信頼度統計
+                writer.writerow(['信頼度統計'])
+                writer.writerow(['信頼度範囲', '検出数'])
+
+                for range_name, count in confidence_ranges.items():
+                    writer.writerow([range_name, count])
+
+            self.logger.info(f"サマリー出力完了: {summary_path}")
+            return str(summary_path)
+
+        except Exception as e:
+            self.logger.error(f"サマリー出力エラー: {str(e)}")
+            raise
+
     def export_species_list(self, results: List[DetectionResult]) -> str:
         """検出された種のリストをCSVファイルに出力"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -1,9 +1,23 @@
 """
-メインGUIモジュール - 元のファイルのバックアップ
-Wildlife Detectorのメインウィンドウ（2025-06-06バックアップ）
+Wildlife Detector メインGUIモジュール
+
+PySide6ベースのメインウィンドウを提供します。
+大量画像処理に対応したページング表示機能を実装しています。
+
+主要クラス:
+    - ProcessingThread: バッチ処理用のワーカースレッド
+    - MainWindow: アプリケーションのメインウィンドウ
+
+機能:
+    - 画像ファイル/フォルダの選択
+    - バッチ処理の実行と進捗表示
+    - 結果のページング表示（100件/ページ）
+    - CSV出力とファイル振り分け
 """
 import sys
 import os
+import csv
+import shutil
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import threading
@@ -20,47 +34,48 @@ from PySide6.QtGui import QFont, QPixmap, QIcon
 
 from core.config import ConfigManager, AppConfig
 from core.batch_processor import BatchProcessor, ProcessingStats
-from core.species_detector import DetectionResult
+from core.species_detector_direct import DetectionResult
 from utils.csv_exporter import CSVExporter
 from utils.file_manager import FileManager
 
 class ProcessingThread(QThread):
     """バッチ処理用スレッド"""
-    
+
     progress_updated = Signal(float, str, object)  # progress, current_file, stats
-    processing_completed = Signal(list)  # results
+    processing_completed = Signal(dict)  # summary dict (not list)
     error_occurred = Signal(str, str)  # title, message
-    
-    def __init__(self, processor: BatchProcessor, image_paths: List[str]):
+
+    def __init__(self, processor: BatchProcessor, image_paths: List[str], output_dir: str):
         super().__init__()
         self.processor = processor
         self.image_paths = image_paths
-        self.results = []
-    
+        self.output_dir = output_dir
+        self.summary = {}
+
     def run(self):
         """処理スレッドの実行"""
         try:
             # コールバック設定
             self.processor.set_progress_callback(self._on_progress)
             self.processor.set_error_callback(self._on_error)
-            
-            # バッチ処理実行
-            self.results = self.processor.process_images(self.image_paths)
-            
+
+            # バッチ処理実行（ストリーミングモード - サマリーのみ返却）
+            self.summary = self.processor.process_images(self.image_paths, self.output_dir)
+
             # 完了シグナル
-            self.processing_completed.emit(self.results)
-            
+            self.processing_completed.emit(self.summary)
+
         except Exception as e:
             self.error_occurred.emit("処理エラー", str(e))
-    
+
     def _on_progress(self, progress: float, current_file: str, stats: ProcessingStats):
         """進捗更新コールバック"""
         self.progress_updated.emit(progress, current_file, stats)
-    
+
     def _on_error(self, file_path: str, error_message: str):
         """エラーコールバック"""
         self.error_occurred.emit(f"ファイル処理エラー: {os.path.basename(file_path)}", error_message)
-    
+
     def stop_processing(self):
         """処理停止"""
         if self.processor:
@@ -68,23 +83,33 @@ class ProcessingThread(QThread):
 
 class MainWindow(QMainWindow):
     """メインウィンドウクラス"""
-    
+
+    # ページング設定
+    RESULTS_PER_PAGE = 100
+
     def __init__(self):
         super().__init__()
-        
+
         # 設定管理
         self.config_manager = ConfigManager()
         self.config = self.config_manager.load_config()
-        
+
         # 処理関連
         self.processor = BatchProcessor(self.config)
         self.processing_thread = None
-        self.current_results = []
-        
+
+        # 結果CSVパス（メモリ節約のため全結果は保持しない）
+        self.results_csv_path = None
+        self.results_summary = {}
+
+        # ページング用
+        self.current_page = 0
+        self.total_results = 0
+
         # UI初期化
         self.init_ui()
         self.setup_connections()
-        
+
         # ウィンドウ設定
         self.setWindowTitle("Wildlife Detector - 野生生物検出アプリケーション")
         self.resize(*self.config.window_size)
@@ -247,57 +272,78 @@ class MainWindow(QMainWindow):
         """結果タブの作成"""
         results_widget = QWidget()
         layout = QVBoxLayout(results_widget)
-        
+
         # 結果サマリー
         summary_group = QGroupBox("処理結果サマリー")
         summary_layout = QGridLayout(summary_group)
-        
+
         self.total_images_label = QLabel("総画像数: 0")
         self.detected_images_label = QLabel("検出画像数: 0")
-        self.unique_species_label = QLabel("検出種数: 0")
+        self.unique_species_label = QLabel("検出種数: -")
         self.processing_time_label = QLabel("処理時間: 0秒")
-        
+        self.csv_path_label = QLabel("結果CSV: -")
+
         summary_layout.addWidget(self.total_images_label, 0, 0)
         summary_layout.addWidget(self.detected_images_label, 0, 1)
         summary_layout.addWidget(self.unique_species_label, 1, 0)
         summary_layout.addWidget(self.processing_time_label, 1, 1)
-        
+        summary_layout.addWidget(self.csv_path_label, 2, 0, 1, 2)
+
         layout.addWidget(summary_group)
-        
+
         # 結果テーブル
         table_group = QGroupBox("検出結果詳細")
         table_layout = QVBoxLayout(table_group)
-        
+
         self.results_table = QTableWidget()
-        self.results_table.setColumnCount(7)
+        self.results_table.setColumnCount(6)
         self.results_table.setHorizontalHeaderLabels([
-            "画像名", "種名", "一般名", "学名", "信頼度", "カテゴリ", "検出数"
+            "画像名", "種名", "一般名", "学名", "信頼度", "カテゴリ"
         ])
         table_layout.addWidget(self.results_table)
-        
+
+        # ページング制御
+        paging_layout = QHBoxLayout()
+
+        self.prev_page_btn = QPushButton("前へ")
+        self.prev_page_btn.clicked.connect(self.prev_page)
+        self.prev_page_btn.setEnabled(False)
+        paging_layout.addWidget(self.prev_page_btn)
+
+        self.page_info_label = QLabel("ページ: 0/0")
+        paging_layout.addWidget(self.page_info_label)
+
+        self.next_page_btn = QPushButton("次へ")
+        self.next_page_btn.clicked.connect(self.next_page)
+        self.next_page_btn.setEnabled(False)
+        paging_layout.addWidget(self.next_page_btn)
+
+        paging_layout.addStretch()
+        table_layout.addLayout(paging_layout)
+
         layout.addWidget(table_group)
-        
+
         # エクスポートボタン
         export_layout = QHBoxLayout()
-        
+
         self.export_csv_btn = QPushButton("CSV出力")
         self.export_csv_btn.clicked.connect(self.export_csv)
         self.export_csv_btn.setEnabled(False)
         export_layout.addWidget(self.export_csv_btn)
-        
+
         self.export_summary_btn = QPushButton("サマリー出力")
         self.export_summary_btn.clicked.connect(self.export_summary)
         self.export_summary_btn.setEnabled(False)
         export_layout.addWidget(self.export_summary_btn)
-        
+
         self.organize_files_btn = QPushButton("ファイル振り分け")
         self.organize_files_btn.clicked.connect(self.organize_files)
         self.organize_files_btn.setEnabled(False)
         export_layout.addWidget(self.organize_files_btn)
-        
+
         export_layout.addStretch()
         layout.addLayout(export_layout)
-        
+
         self.tab_widget.addTab(results_widget, "結果")
     
     def create_settings_tab(self):
@@ -417,23 +463,29 @@ class MainWindow(QMainWindow):
         if not hasattr(self, 'selected_files') or not self.selected_files:
             QMessageBox.warning(self, "エラー", "処理する画像ファイルを選択してください")
             return
-        
+
         if not hasattr(self, 'output_folder'):
             QMessageBox.warning(self, "エラー", "出力フォルダを選択してください")
             return
-        
+
         # UI状態の更新
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.tab_widget.setCurrentIndex(1)  # 処理タブに切り替え
-        
-        # 処理スレッドの開始
-        self.processing_thread = ProcessingThread(self.processor, self.selected_files)
+
+        # ページングリセット
+        self.current_page = 0
+        self.total_results = 0
+        self.results_csv_path = None
+        self.results_summary = {}
+
+        # 処理スレッドの開始（output_dirを渡す）
+        self.processing_thread = ProcessingThread(self.processor, self.selected_files, self.output_folder)
         self.processing_thread.progress_updated.connect(self.update_progress)
         self.processing_thread.processing_completed.connect(self.processing_completed)
         self.processing_thread.error_occurred.connect(self.show_error)
         self.processing_thread.start()
-        
+
         self.log_message("処理を開始しました...")
     
     def stop_processing(self):
@@ -467,148 +519,248 @@ class MainWindow(QMainWindow):
             eta_seconds = int(eta_seconds % 60)
             self.eta_label.setText(f"残り時間: {eta_minutes:02d}:{eta_seconds:02d}")
     
-    def processing_completed(self, results: List[DetectionResult]):
+    def processing_completed(self, summary: Dict[str, Any]):
         """処理完了"""
-        self.current_results = results
-        
+        self.results_summary = summary
+        self.results_csv_path = summary.get('csv_path')
+        self.total_results = summary.get('total_processed', 0)
+
         # UI状態の復元
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.progress_bar.setValue(100)
         self.current_file_label.setText("処理完了")
-        
+
         # 結果の表示
-        self.display_results(results)
-        
+        self.display_results_from_summary(summary)
+
         # 結果タブに切り替え
         self.tab_widget.setCurrentIndex(2)
-        
-        # エクスポートボタンの有効化
-        self.export_csv_btn.setEnabled(True)
-        self.export_summary_btn.setEnabled(True)
-        self.organize_files_btn.setEnabled(True)
-        
-        self.log_message(f"処理が完了しました。{len(results)}個の画像を処理しました")
-        
+
+        # エクスポートボタンの有効化（CSVがある場合のみ）
+        has_csv = self.results_csv_path is not None
+        self.export_csv_btn.setEnabled(has_csv)
+        self.export_summary_btn.setEnabled(has_csv)
+        self.organize_files_btn.setEnabled(has_csv)
+
+        total = summary.get('total_processed', 0)
+        successful = summary.get('successful', 0)
+        stopped = summary.get('stopped', False)
+
+        self.log_message(f"処理が完了しました。{total}個の画像を処理しました")
+
+        # 自動振り分け処理（設定がONの場合）
+        organize_result = None
+        if self.create_folders_cb.isChecked() and self.results_csv_path:
+            organize_result = self._auto_organize_files()
+
         # 完了メッセージ
-        QMessageBox.information(self, "処理完了", 
-                               f"処理が完了しました。\n"
-                               f"処理画像数: {len(results)}\n"
-                               f"検出成功: {sum(1 for r in results if r.has_detections())}")
+        status_msg = "（中断されました）" if stopped else ""
+        organize_msg = ""
+        if organize_result:
+            organize_msg = f"\n振り分けフォルダ数: {organize_result.get('folder_count', 0)}"
+
+        QMessageBox.information(self, "処理完了",
+                               f"処理が完了しました{status_msg}\n"
+                               f"処理画像数: {total}\n"
+                               f"検出成功: {successful}\n"
+                               f"結果CSV: {self.results_csv_path or 'なし'}{organize_msg}")
     
-    def display_results(self, results: List[DetectionResult]):
-        """結果表示"""
-        # サマリー更新
-        total_images = len(results)
-        detected_images = sum(1 for r in results if r.has_detections())
-        
-        # 種類の集計
-        species_set = set()
-        for result in results:
-            for detection in result.detections:
-                species_set.add(detection.get('species', 'Unknown'))
-        
+    def display_results_from_summary(self, summary: Dict[str, Any]):
+        """サマリー情報から結果を表示"""
+        total_images = summary.get('total_processed', 0)
+        detected_images = summary.get('successful', 0)
         processing_time = self.processor.get_stats().get_elapsed_time()
-        
+
         self.total_images_label.setText(f"総画像数: {total_images}")
         self.detected_images_label.setText(f"検出画像数: {detected_images}")
-        self.unique_species_label.setText(f"検出種数: {len(species_set)}")
         self.processing_time_label.setText(f"処理時間: {processing_time:.1f}秒")
-        
-        # テーブル更新
-        self.update_results_table(results)
-    
-    def update_results_table(self, results: List[DetectionResult]):
-        """結果テーブル更新"""
+
+        csv_path = summary.get('csv_path')
+        if csv_path:
+            self.csv_path_label.setText(f"結果CSV: {os.path.basename(csv_path)}")
+            # 種数をCSVからカウント
+            species_count = self._count_unique_species_from_csv(csv_path)
+            self.unique_species_label.setText(f"検出種数: {species_count}")
+        else:
+            self.csv_path_label.setText("結果CSV: なし")
+            self.unique_species_label.setText("検出種数: -")
+
+        # 最初のページを表示
+        self.current_page = 0
+        self.load_results_page()
+
+    def _count_unique_species_from_csv(self, csv_path: str) -> int:
+        """CSVから検出種数をカウント"""
+        species_set = set()
+        try:
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    species = row.get('species', '')
+                    if species:
+                        species_set.add(species)
+        except Exception:
+            pass
+        return len(species_set)
+
+    def load_results_page(self):
+        """現在のページの結果をCSVから読み込んで表示"""
         # テーブルのクリア
         self.results_table.setRowCount(0)
-        
-        row = 0
-        for result in results:
-            if result.has_detections():
-                for detection in result.detections:
-                    self.results_table.insertRow(row)
-                    
-                    self.results_table.setItem(row, 0, QTableWidgetItem(result.image_name))
-                    self.results_table.setItem(row, 1, QTableWidgetItem(detection.get('species', '')))
-                    self.results_table.setItem(row, 2, QTableWidgetItem(detection.get('common_name', '')))
-                    self.results_table.setItem(row, 3, QTableWidgetItem(detection.get('scientific_name', '')))
-                    self.results_table.setItem(row, 4, QTableWidgetItem(f"{detection.get('confidence', 0):.3f}"))
-                    self.results_table.setItem(row, 5, QTableWidgetItem(detection.get('category', '')))
-                    self.results_table.setItem(row, 6, QTableWidgetItem(str(len(result.detections))))
-                    
-                    row += 1
-            else:
-                # 検出なしの行
-                self.results_table.insertRow(row)
-                self.results_table.setItem(row, 0, QTableWidgetItem(result.image_name))
-                self.results_table.setItem(row, 1, QTableWidgetItem("検出なし"))
-                for col in range(2, 7):
-                    self.results_table.setItem(row, col, QTableWidgetItem(""))
-                row += 1
-        
-        # 列幅の調整
-        self.results_table.resizeColumnsToContents()
+
+        if not self.results_csv_path or not os.path.exists(self.results_csv_path):
+            self.page_info_label.setText("ページ: 0/0")
+            self.prev_page_btn.setEnabled(False)
+            self.next_page_btn.setEnabled(False)
+            return
+
+        try:
+            # CSVから該当ページの行を読み込み
+            start_row = self.current_page * self.RESULTS_PER_PAGE
+            end_row = start_row + self.RESULTS_PER_PAGE
+
+            rows_to_display = []
+            total_rows = 0
+
+            with open(self.results_csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for i, row in enumerate(reader):
+                    total_rows += 1
+                    if start_row <= i < end_row:
+                        rows_to_display.append(row)
+
+            # テーブルに表示
+            for row_data in rows_to_display:
+                row_idx = self.results_table.rowCount()
+                self.results_table.insertRow(row_idx)
+
+                image_name = row_data.get('image_name', '')
+                species = row_data.get('species', '')
+                common_name = row_data.get('common_name', '')
+                scientific_name = row_data.get('scientific_name', '')
+                confidence = row_data.get('confidence', '0')
+                category = row_data.get('category', '')
+
+                self.results_table.setItem(row_idx, 0, QTableWidgetItem(image_name))
+                self.results_table.setItem(row_idx, 1, QTableWidgetItem(species if species else "検出なし"))
+                self.results_table.setItem(row_idx, 2, QTableWidgetItem(common_name))
+                self.results_table.setItem(row_idx, 3, QTableWidgetItem(scientific_name))
+                try:
+                    conf_val = float(confidence)
+                    self.results_table.setItem(row_idx, 4, QTableWidgetItem(f"{conf_val:.3f}"))
+                except ValueError:
+                    self.results_table.setItem(row_idx, 4, QTableWidgetItem(confidence))
+                self.results_table.setItem(row_idx, 5, QTableWidgetItem(category))
+
+            # 列幅の調整
+            self.results_table.resizeColumnsToContents()
+
+            # ページング情報の更新
+            total_pages = (total_rows + self.RESULTS_PER_PAGE - 1) // self.RESULTS_PER_PAGE
+            self.page_info_label.setText(f"ページ: {self.current_page + 1}/{total_pages} ({total_rows}件)")
+
+            self.prev_page_btn.setEnabled(self.current_page > 0)
+            self.next_page_btn.setEnabled(self.current_page < total_pages - 1)
+
+        except Exception as e:
+            self.log_message(f"結果読み込みエラー: {str(e)}")
+
+    def prev_page(self):
+        """前のページへ"""
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.load_results_page()
+
+    def next_page(self):
+        """次のページへ"""
+        self.current_page += 1
+        self.load_results_page()
     
     def export_csv(self):
-        """CSV出力"""
-        if not self.current_results:
+        """CSV出力（処理済みCSVをコピー）"""
+        if not self.results_csv_path or not os.path.exists(self.results_csv_path):
+            QMessageBox.warning(self, "エラー", "出力する結果がありません")
             return
-        
+
         try:
-            exporter = CSVExporter(self.output_folder)
-            csv_path = exporter.export_results(self.current_results)
-            
-            QMessageBox.information(self, "CSV出力完了", f"CSVファイルを出力しました:\n{csv_path}")
-            self.log_message(f"CSV出力完了: {csv_path}")
-            
+            # 処理済みCSVを出力フォルダにコピー
+            dest_path = Path(self.output_folder) / os.path.basename(self.results_csv_path)
+            if str(dest_path) != self.results_csv_path:
+                shutil.copy2(self.results_csv_path, dest_path)
+                QMessageBox.information(self, "CSV出力完了", f"CSVファイルをコピーしました:\n{dest_path}")
+                self.log_message(f"CSV出力完了: {dest_path}")
+            else:
+                QMessageBox.information(self, "CSV出力完了", f"結果CSVは既に出力フォルダにあります:\n{self.results_csv_path}")
+
         except Exception as e:
             QMessageBox.critical(self, "CSV出力エラー", f"CSV出力中にエラーが発生しました:\n{str(e)}")
     
     def export_summary(self):
-        """サマリー出力"""
-        if not self.current_results:
+        """サマリー出力（CSVベース）"""
+        if not self.results_csv_path or not os.path.exists(self.results_csv_path):
+            QMessageBox.warning(self, "エラー", "出力する結果がありません")
             return
-        
+
         try:
             exporter = CSVExporter(self.output_folder)
             stats = self.processor.get_stats()
-            summary_path = exporter.export_summary(self.current_results, stats)
-            
+            summary_path = exporter.export_summary_from_csv(self.results_csv_path, stats)
+
             QMessageBox.information(self, "サマリー出力完了", f"サマリーファイルを出力しました:\n{summary_path}")
             self.log_message(f"サマリー出力完了: {summary_path}")
-            
+
         except Exception as e:
             QMessageBox.critical(self, "サマリー出力エラー", f"サマリー出力中にエラーが発生しました:\n{str(e)}")
     
+    def _auto_organize_files(self) -> Optional[Dict[str, Any]]:
+        """自動ファイル振り分け（処理完了時に呼び出し）"""
+        if not self.results_csv_path or not os.path.exists(self.results_csv_path):
+            return None
+
+        try:
+            self.log_message("ファイル振り分けを開始...")
+            file_manager = FileManager(self.output_folder)
+            copy_files = self.copy_images_cb.isChecked()
+
+            # CSVから振り分け実行
+            organization_map = file_manager.organize_images_by_species_from_csv(
+                self.results_csv_path, copy_files
+            )
+
+            summary_path = file_manager.create_species_summary_file(organization_map)
+
+            operation = "コピー" if copy_files else "移動"
+            self.log_message(f"ファイル振り分け完了: {len(organization_map)}個のフォルダを作成（{operation}）")
+
+            return {
+                'folder_count': len(organization_map),
+                'summary_path': summary_path,
+                'organization_map': organization_map
+            }
+
+        except Exception as e:
+            self.log_message(f"ファイル振り分けエラー: {str(e)}")
+            return None
+
     def organize_files(self):
-        """ファイル振り分け"""
-        if not self.current_results:
+        """ファイル振り分け（CSVベース）- 手動実行用"""
+        if not self.results_csv_path or not os.path.exists(self.results_csv_path):
+            QMessageBox.warning(self, "エラー", "振り分ける結果がありません")
             return
-        
-        reply = QMessageBox.question(self, "ファイル振り分け確認", 
+
+        reply = QMessageBox.question(self, "ファイル振り分け確認",
                                    "検出結果に基づいて画像ファイルを種別フォルダに振り分けますか?")
-        
+
         if reply == QMessageBox.Yes:
-            try:
-                file_manager = FileManager(self.output_folder)
-                copy_files = self.copy_images_cb.isChecked()
-                
-                organization_map = file_manager.organize_images_by_species(
-                    self.current_results, copy_files
-                )
-                
-                summary_path = file_manager.create_species_summary_file(organization_map)
-                
-                QMessageBox.information(self, "振り分け完了", 
+            result = self._auto_organize_files()
+            if result:
+                QMessageBox.information(self, "振り分け完了",
                                       f"ファイルの振り分けが完了しました。\n"
-                                      f"作成フォルダ数: {len(organization_map)}\n"
-                                      f"サマリー: {summary_path}")
-                
-                self.log_message(f"ファイル振り分け完了: {len(organization_map)}個のフォルダを作成")
-                
-            except Exception as e:
-                QMessageBox.critical(self, "振り分けエラー", f"ファイル振り分け中にエラーが発生しました:\n{str(e)}")
+                                      f"作成フォルダ数: {result['folder_count']}\n"
+                                      f"サマリー: {result['summary_path']}")
+            else:
+                QMessageBox.critical(self, "振り分けエラー", "ファイル振り分け中にエラーが発生しました")
     
     def update_config(self):
         """設定更新"""
@@ -670,5 +822,5 @@ class MainWindow(QMainWindow):
         else:
             # 設定の保存
             self.update_config()
-            self.config_manager.save_config()
+            self.config_manager.save_config(self.config)
             event.accept()
