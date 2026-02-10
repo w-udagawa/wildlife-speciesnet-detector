@@ -29,7 +29,7 @@ Wildlife Detectorは、画像から野生生物（特に鳥類と哺乳類）を
 
 1. リポジトリをクローン:
 ```bash
-git clone https://github.com/yourusername/wildlife-detector.git
+git clone https://github.com/w-udagawa/wildlife-detector.git
 cd wildlife-detector
 ```
 
@@ -134,3 +134,4 @@ wildlife_detector/
 - Google SpeciesNetチームの優れたAIモデル
 - PySide6コミュニティ
 - すべての貢献者とテスター
+
