@@ -38,6 +38,8 @@ cd wildlife-speciesnet-detector
 2. 仮想環境を作成・有効化:
 ```bash
 python -m venv wildlife_env
+```
+```bash
 wildlife_env\Scripts\activate  # Windows
 ```
 
@@ -136,6 +138,7 @@ wildlife_detector/
 - Google SpeciesNetチームの優れたAIモデル
 - PySide6コミュニティ
 - すべての貢献者とテスター
+
 
 
 
