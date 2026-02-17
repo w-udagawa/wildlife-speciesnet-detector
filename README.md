@@ -32,7 +32,7 @@ Wildlife Detectorは、画像から野生生物（特に鳥類と哺乳類）を
 git clone https://github.com/w-udagawa/wildlife-speciesnet-detector.git
 ```
 ```bash
-cd wildlife-detector
+cd wildlife-speciesnet-detector
 ```
 
 2. 仮想環境を作成・有効化:
@@ -136,5 +136,6 @@ wildlife_detector/
 - Google SpeciesNetチームの優れたAIモデル
 - PySide6コミュニティ
 - すべての貢献者とテスター
+
 
 
