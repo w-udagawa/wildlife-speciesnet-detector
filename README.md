@@ -49,7 +49,7 @@ wildlife_env\Scripts\activate.bat
 
 3. pip を最新化し、依存関係をインストール:
 ```bash
-pip install -U pip
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
