@@ -50,6 +50,7 @@ wildlife_env\Scripts\activate.bat
 3. pip を最新化し、依存関係をインストール:
 ```bash
 python -m pip install --upgrade pip
+pip install "setuptools<81" wheel
 pip install -r requirements.txt
 ```
 

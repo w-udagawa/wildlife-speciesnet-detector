@@ -49,6 +49,7 @@ class AppConfig:
     gc_interval: int = 50  # ガベージコレクション間隔（枚数）
     consecutive_error_limit: int = 3  # 連続エラー上限（この回数超えると処理中断）
     run_mode: str = "multi_thread"  # SpeciesNet APIの実行モード（"multi_thread" or "single"）
+    predict_chunk_size: int = 500  # predict()呼び出し単位の画像数（SpeciesNet内部batch_sizeとは別）
     
     @classmethod
     def get_default(cls) -> 'AppConfig':

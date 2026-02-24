@@ -78,7 +78,18 @@ class WildlifeDetectorApp:
             import speciesnet
             self.logger.info("✓ speciesnet - OK")
         except Exception as e:
-            self.logger.warning(f"⚠ speciesnet - 起動時の読み込みスキップ（検出開始時に再試行します）: {e!r}")
+            # setuptools バージョン診断
+            hint = ""
+            try:
+                import importlib.metadata
+                st_ver = importlib.metadata.version("setuptools")
+                major = int(st_ver.split(".")[0])
+                if major >= 81:
+                    hint = (f"\n  → setuptools {st_ver} が原因の可能性があります。"
+                            f"\n  → 修正: pip install \"setuptools<81\" && pip install --force-reinstall speciesnet")
+            except Exception:
+                pass
+            self.logger.warning(f"⚠ speciesnet - 起動時の読み込みスキップ（検出開始時に再試行します）: {e!r}{hint}")
         
         if missing_packages:
             self.show_dependency_error(missing_packages)

@@ -71,10 +71,6 @@ class SpeciesDetectorDirect:
         self.batch_size = getattr(config, 'batch_size', 32) if config else 32
         self.run_mode = getattr(config, 'run_mode', 'multi_thread') if config else 'multi_thread'
 
-        # メモリ管理用カウンター
-        self._process_count = 0
-        self._gc_interval = getattr(config, 'gc_interval', 50) if config else 50
-
         self.logger.info("SpeciesNetネイティブAPI統合モード")
 
     def initialize(self) -> bool:
@@ -103,12 +99,6 @@ class SpeciesDetectorDirect:
             if not self.initialize():
                 return [DetectionResult(p, []) for p in image_paths]
 
-        # 定期的なメモリ管理
-        self._process_count += len(image_paths)
-        if self._process_count % self._gc_interval < len(image_paths):
-            gc.collect()
-            self.logger.debug(f"メモリ解放実行 (処理済み: {self._process_count}枚)")
-
         try:
             predictions_data = self.model.predict(
                 filepaths=image_paths,
@@ -122,37 +112,29 @@ class SpeciesDetectorDirect:
             self.logger.error(f"バッチ推論エラー: {e}")
             return [DetectionResult(p, []) for p in image_paths]
 
+        # filepath→prediction の辞書を1回構築（O(n) lookup）
+        predictions_list = predictions_data.get('predictions', [])
+        pred_by_path = {}
+        for prediction in predictions_list:
+            abs_path = os.path.abspath(prediction.get('filepath', ''))
+            pred_by_path.setdefault(abs_path, []).append(prediction)
+
+        # O(1) lookup で結果を取得
         results = []
         for path in image_paths:
-            detections = self._extract_detections_for_image(predictions_data, path)
+            abs_path = os.path.abspath(path)
+            matched = pred_by_path.get(abs_path, [])
+            detections = []
+            for pred in matched:
+                det = self._create_detection_from_prediction(pred)
+                if det:
+                    detections.append(det)
             results.append(DetectionResult(path, detections))
         return results
 
     def detect_single_image(self, image_path: str) -> DetectionResult:
         """単一画像の検出処理"""
         return self.predict_batch([image_path])[0]
-
-    def _extract_detections_for_image(self, results_data: Any, target_image_path: str) -> List[Dict[str, Any]]:
-        """結果データから対象画像の検出結果を抽出"""
-        try:
-            detections = []
-            target_abs = os.path.abspath(target_image_path)
-
-            predictions = results_data.get('predictions', [])
-
-            for prediction in predictions:
-                filepath = prediction.get('filepath', '')
-                # 絶対パス比較（ネイティブAPIでは入力パスがそのまま返る）
-                if os.path.abspath(filepath) == target_abs:
-                    detection = self._create_detection_from_prediction(prediction)
-                    if detection:
-                        detections.append(detection)
-
-            return detections
-
-        except Exception as e:
-            self.logger.error(f"検出結果抽出エラー: {e}")
-            return []
 
     def _create_detection_from_prediction(self, prediction: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """SpeciesNet予測結果から検出オブジェクトを作成"""
@@ -263,9 +245,7 @@ class SpeciesDetectorDirect:
             'country': self.country,
             'confidence_threshold': self.confidence_threshold,
             'batch_size': self.batch_size,
-            'run_mode': self.run_mode,
-            'gc_interval': self._gc_interval,
-            'process_count': self._process_count
+            'run_mode': self.run_mode
         }
 
 # 下位互換性のためのエイリアス

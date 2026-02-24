@@ -109,6 +109,7 @@ class BatchProcessor:
         self.intermediate_save_interval = getattr(config, 'intermediate_save_interval', 100) if config else 100
         self.consecutive_error_limit = getattr(config, 'consecutive_error_limit', 3) if config else 3
         self.batch_size = getattr(config, 'batch_size', 32) if config else 32
+        self.predict_chunk_size = getattr(config, 'predict_chunk_size', 500) if config else 500
 
         # 結果CSV保存パス
         self.intermediate_save_path = None
@@ -177,19 +178,20 @@ class BatchProcessor:
         total_failed = 0
 
         try:
-            batch_size = self.batch_size
+            predict_chunk_size = self.predict_chunk_size
 
-            self.logger.info(f"バッチ処理開始（ネイティブAPIモード）: {len(image_paths)} 画像, バッチサイズ={batch_size}")
+            self.logger.info(f"バッチ処理開始（ネイティブAPIモード）: {len(image_paths)} 画像, "
+                            f"チャンクサイズ={predict_chunk_size}, 内部バッチサイズ={self.batch_size}")
             self.logger.info(f"メモリ管理: GC間隔={self.gc_interval}枚, 中間保存間隔={self.intermediate_save_interval}枚")
             self.logger.info(f"結果CSV: {self.intermediate_save_path}")
 
             # チャンク単位でバッチ処理
-            for chunk_start in range(0, len(image_paths), batch_size):
+            for chunk_start in range(0, len(image_paths), predict_chunk_size):
                 if self.stop_requested:
                     self.logger.info("処理停止が要求されました")
                     break
 
-                chunk = image_paths[chunk_start:chunk_start + batch_size]
+                chunk = image_paths[chunk_start:chunk_start + predict_chunk_size]
 
                 try:
                     chunk_results = self.detector.predict_batch(chunk)
