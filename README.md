@@ -6,7 +6,7 @@
 
 Wildlife Detectorは、画像から野生生物（特に鳥類と哺乳類）を自動検出するデスクトップアプリケーションです。Google SpeciesNetの最新のAIモデルを使用して、高精度な種の識別を実現します。
 
-**v1.2の新機能**: 検出結果に基づく自動ファイル振り分け機能を追加しました。
+**v2.0の主な改善**: SpeciesNetネイティブAPI化による高速バッチ処理、メモリ効率の大幅改善。
 
 ## 主な機能
 
@@ -54,6 +54,8 @@ pip install "setuptools<81" wheel
 pip install -r requirements.txt
 ```
 
+> **Note**: `setuptools<81` は必ず `requirements.txt` より先にインストールしてください。speciesnet が内部で使用する `pkg_resources` は setuptools 81 で削除されたため、setuptools >= 81 では import に失敗します。
+
 ## 使い方
 
 1. アプリケーションを起動:
@@ -97,8 +99,10 @@ wildlife_detector/
 
 ### 検出設定
 - **信頼度閾値**: 検出の最小信頼度（0.0-1.0、デフォルト: 0.1）
-- **バッチサイズ**: SpeciesNet処理単位（デフォルト: 32）
+- **バッチサイズ**: SpeciesNet内部のGPU処理単位（デフォルト: 32）
+- **予測チャンクサイズ**: `predict()` 1回あたりの画像数（デフォルト: 500）
 - **地域フィルター**: 特定地域の種に限定（JPN, USA, etc.）
+- **実行モード**: SpeciesNet APIの実行モード（`multi_thread` / `single`、デフォルト: `multi_thread`）
 
 ### パフォーマンス設定
 - **最大ワーカー数**: 並列処理スレッド数（デフォルト: 2）
@@ -109,7 +113,7 @@ wildlife_detector/
 - **中間保存間隔**: CSV保存とメモリ解放間隔（デフォルト: 100枚ごと）
 - **連続エラー上限**: 自動中断までのエラー回数（デフォルト: 3回）
 
-## 自動ファイル振り分け機能（v1.2新機能）
+## 自動ファイル振り分け機能
 
 検出結果に基づいて画像ファイルを自動的に振り分ける機能を追加しました：
 
@@ -125,6 +129,30 @@ wildlife_detector/
 2. **ページング表示**: 結果画面で100件ずつ表示し、UIのメモリ負荷を軽減
 3. **定期的なGC**: 処理中に定期的なガベージコレクションを実行
 4. **中断機能**: 連続エラー発生時に自動的に処理を中断して結果を保存
+
+## トラブルシューティング
+
+### speciesnet の import に失敗する
+
+```
+ERROR - ✗ speciesnet - 未インストール
+```
+または
+```
+ModuleNotFoundError: No module named 'pkg_resources'
+```
+
+**原因**: setuptools >= 81 がインストールされている環境では、speciesnet が依存する `pkg_resources` が利用できません。
+
+**対処法**:
+```bash
+pip install "setuptools<81"
+pip install --force-reinstall speciesnet
+```
+
+### Python 3.12+ の venv で setuptools が自動的に 82+ になる
+
+Python 3.12 以降の `python -m venv` は setuptools 82+ をバンドルする場合があります。仮想環境作成後、最初に `pip install "setuptools<81"` を実行してください。
 
 ## ライセンス
 
