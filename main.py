@@ -69,17 +69,16 @@ class WildlifeDetectorApp:
             try:
                 __import__(module)
                 self.logger.info(f"✓ {package} - OK")
-            except ImportError:
+            except Exception as e:
                 missing_packages.append(package)
-                self.logger.error(f"✗ {package} - 未インストール")
+                self.logger.exception(f"✗ {package} - import失敗: {e!r}")
         
-        # SpeciesNetの特別チェック
+        # SpeciesNetのチェック（起動ブロックしない — 実際の読み込みは検出開始時に遅延実行）
         try:
             import speciesnet
             self.logger.info("✓ speciesnet - OK")
-        except ImportError:
-            missing_packages.append('speciesnet')
-            self.logger.error("✗ speciesnet - 未インストール")
+        except Exception as e:
+            self.logger.warning(f"⚠ speciesnet - 起動時の読み込みスキップ（検出開始時に再試行します）: {e!r}")
         
         if missing_packages:
             self.show_dependency_error(missing_packages)
@@ -95,6 +94,8 @@ class WildlifeDetectorApp:
         error_msg += "\\n".join([f"• {pkg}" for pkg in missing_packages])
         error_msg += "\\n\\n次のコマンドでインストールしてください:\\n"
         error_msg += "pip install " + " ".join(missing_packages)
+        error_msg += "\\n\\n※ importエラーが発生する場合は以下もお試しください:\\n"
+        error_msg += "pip install \"setuptools<81\" wheel"
         
         msg_box = QMessageBox()
         msg_box.setIcon(QMessageBox.Critical)
@@ -133,7 +134,7 @@ class WildlifeDetectorApp:
         # QApplicationの作成
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("Wildlife Detector")
-        self.app.setApplicationVersion("1.0.0")
+        self.app.setApplicationVersion("2.0.0")
         self.app.setOrganizationName("Wildlife Detection Team")
         
         # アプリケーションの詳細設定

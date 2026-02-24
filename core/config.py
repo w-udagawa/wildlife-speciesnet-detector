@@ -18,7 +18,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 
 @dataclass
 class AppConfig:
@@ -48,7 +48,7 @@ class AppConfig:
     intermediate_save_interval: int = 100  # 中間保存間隔（枚数）
     gc_interval: int = 50  # ガベージコレクション間隔（枚数）
     consecutive_error_limit: int = 3  # 連続エラー上限（この回数超えると処理中断）
-    subprocess_timeout: int = 600  # subprocess タイムアウト（秒）- 旧: 300
+    run_mode: str = "multi_thread"  # SpeciesNet APIの実行モード（"multi_thread" or "single"）
     
     @classmethod
     def get_default(cls) -> 'AppConfig':
@@ -61,8 +61,10 @@ class AppConfig:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AppConfig':
-        """辞書から設定を作成"""
-        return cls(**data)
+        """辞書から設定を作成（未知のキーは無視）"""
+        valid_fields = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
 class ConfigManager:
     """設定管理クラス"""

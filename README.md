@@ -30,27 +30,27 @@ Wildlife Detectorは、画像から野生生物（特に鳥類と哺乳類）を
 1. リポジトリをクローン:
 ```bash
 git clone https://github.com/w-udagawa/wildlife-speciesnet-detector.git
-```
-```bash
 cd wildlife-speciesnet-detector
 ```
 
 2. 仮想環境を作成・有効化:
-```bash
+
+**PowerShell:**
+```powershell
 python -m venv wildlife_env
-```
-```bash
-wildlife_env\Scripts\activate  # Windows
+wildlife_env\Scripts\Activate.ps1
 ```
 
-3. 依存関係をインストール:
+**コマンドプロンプト (cmd):**
+```cmd
+python -m venv wildlife_env
+wildlife_env\Scripts\activate.bat
+```
+
+3. pip を最新化し、依存関係をインストール:
 ```bash
+pip install -U pip
 pip install -r requirements.txt
-```
-
-4. SpeciesNetをインストール:
-```bash
-pip install speciesnet
 ```
 
 ## 使い方

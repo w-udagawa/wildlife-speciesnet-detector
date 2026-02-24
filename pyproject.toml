@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wildlife-detector"
-version = "1.0.0"
+version = "2.0.0"
 description = "Google SpeciesNetを使用した高精度野生生物検出デスクトップアプリケーション"
 authors = [
     {name = "Wildlife Detector Team", email = "your-email@example.com"}
@@ -55,10 +55,9 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/wildlife-detector"
-Documentation = "https://your-username.github.io/wildlife-detector"
-Repository = "https://github.com/your-username/wildlife-detector.git"
-"Bug Tracker" = "https://github.com/your-username/wildlife-detector/issues"
+Homepage = "https://github.com/w-udagawa/wildlife-speciesnet-detector"
+Repository = "https://github.com/w-udagawa/wildlife-speciesnet-detector.git"
+"Bug Tracker" = "https://github.com/w-udagawa/wildlife-speciesnet-detector/issues"
 
 [project.scripts]
 wildlife-detector = "wildlife_detector.main:main"
