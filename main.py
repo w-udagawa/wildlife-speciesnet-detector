@@ -16,7 +16,7 @@ sys.path.insert(0, str(app_root))
 
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import Qt, QTimer
     from PySide6.QtGui import QPixmap, QFont
 except ImportError:
     print("エラー: PySide6がインストールされていません")
@@ -145,7 +145,7 @@ class WildlifeDetectorApp:
         # QApplicationの作成
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("Wildlife Detector")
-        self.app.setApplicationVersion("2.0.0")
+        self.app.setApplicationVersion("2.1.0")
         self.app.setOrganizationName("Wildlife Detection Team")
         
         # アプリケーションの詳細設定
@@ -181,14 +181,8 @@ class WildlifeDetectorApp:
             )
             self.app.processEvents()
 
-            # 2秒間表示
-            import time
-            time.sleep(2)
-
-            splash.close()
-
-            # メインウィンドウの表示
-            self.main_window.show()
+            # 2秒後にスプラッシュを閉じてメインウィンドウを表示（イベントループをブロックしない）
+            QTimer.singleShot(2000, lambda: (splash.close(), self.main_window.show()))
             
             self.logger.info("アプリケーション初期化完了")
             

@@ -15,7 +15,6 @@ Wildlife Detector CSV出力モジュール
 """
 import csv
 import os
-import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
