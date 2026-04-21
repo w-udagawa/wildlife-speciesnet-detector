@@ -35,19 +35,16 @@ class AppConfig:
     create_species_folders: bool = True
     copy_images_to_folders: bool = True
     output_csv: bool = True
+    organize_by_date: bool = False  # 種別フォルダ配下に撮影日(YYYY-MM-DD)サブフォルダを作る
 
     # UI設定
     window_size: tuple = (1200, 800)
     theme: str = "default"
 
-    # 高度な設定
-    max_image_size: tuple = (1920, 1080)
-    processing_timeout: int = 300  # 5分
-
     # 大量画像処理向けメモリ管理設定
-    intermediate_save_interval: int = 100  # 中間保存間隔（枚数）
+    intermediate_save_interval: int = 100  # 中間保存間隔（枚数、旧版互換用、現在はチャンク境界で保存）
     gc_interval: int = 50  # ガベージコレクション間隔（枚数）
-    consecutive_error_limit: int = 3  # 連続エラー上限（この回数超えると処理中断）
+    consecutive_error_limit: int = 3  # 連続エラー上限（API例外のみカウント、超えると処理中断）
     run_mode: str = "multi_thread"  # SpeciesNet APIの実行モード（"multi_thread" or "single"）
     predict_chunk_size: int = 500  # predict()呼び出し単位の画像数（SpeciesNet内部batch_sizeとは別）
     

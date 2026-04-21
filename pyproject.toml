@@ -4,24 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wildlife-detector"
-version = "2.0.0"
+version = "2.1.0"
 description = "Google SpeciesNetを使用した高精度野生生物検出デスクトップアプリケーション"
 authors = [
     {name = "Wildlife Detector Team", email = "your-email@example.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
@@ -60,14 +58,15 @@ Repository = "https://github.com/w-udagawa/wildlife-speciesnet-detector.git"
 "Bug Tracker" = "https://github.com/w-udagawa/wildlife-speciesnet-detector/issues"
 
 [project.scripts]
-wildlife-detector = "wildlife_detector.main:main"
+wildlife-detector = "main:main"
 
-[tool.setuptools.packages.find]
-include = ["wildlife_detector*"]
+[tool.setuptools]
+packages = ["core", "gui", "utils"]
+py-modules = ["main"]
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -102,7 +101,7 @@ exclude = [
 ]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
@@ -121,7 +120,9 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--verbose",
-    "--cov=wildlife_detector",
+    "--cov=core",
+    "--cov=gui",
+    "--cov=utils",
     "--cov-report=html",
     "--cov-report=term-missing",
 ]
@@ -131,7 +132,7 @@ exclude_dirs = ["tests", "build", "dist"]
 skips = ["B101", "B601"]
 
 [tool.coverage.run]
-source = ["wildlife_detector"]
+source = ["core", "gui", "utils"]
 omit = [
     "*/tests/*",
     "*/test_*.py",

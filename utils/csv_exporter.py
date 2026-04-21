@@ -16,13 +16,18 @@ Wildlife Detector CSV出力モジュール
 import csv
 import os
 import time
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import logging
 
-from core.species_detector_direct import DetectionResult
+from core.species_detector_direct import DetectionResult, SpeciesDetectorDirect
 from core.batch_processor import ProcessingStats
+from utils.image_meta import extract_image_date
+
+# ピボット出力で未検出行に使うラベル
+NO_DETECTION_PIVOT_LABEL = "撮影無し"
 
 class CSVExporter:
     """CSV出力クラス"""
@@ -312,6 +317,116 @@ class CSVExporter:
 
         except Exception as e:
             self.logger.error(f"サマリー出力エラー: {str(e)}")
+            raise
+
+    def export_daily_species_pivot(self, source_csv_path: str,
+                                   output_filename: Optional[str] = None) -> str:
+        """検出CSVから「日付×撮影種」ピボットCSVを生成する。
+
+        各画像の日付は EXIF DateTimeOriginal（なければファイル mtime）から取得し、
+        列に日付、行に撮影種、セルに枚数を格納する。
+        未検出扱い (blank/no cv result/空) は「撮影無し」行に集約。
+
+        出力フォーマット (例):
+            日付,2024-11-21,2024-11-22,...
+            合計撮影枚数,10,5,...
+            撮影無し,3,2,...
+            ハシブトガラス,2,1,...
+            ...
+            合計,10,5,...
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = output_filename or f"daily_species_pivot_{timestamp}.csv"
+        pivot_path = self.output_dir / filename
+
+        # counts[date][species_label] = 枚数
+        counts: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        species_order: List[str] = []  # 初出順を保持
+        species_seen: set = set()
+
+        try:
+            with open(source_csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    image_path = (row.get('image_path') or '').strip()
+                    species = (row.get('species') or '').strip()
+                    common_name = (row.get('common_name') or '').strip()
+
+                    # 日付は CSV の image_date 列優先（EXIF再読込を回避）
+                    date_str = (row.get('image_date') or '').strip()
+                    if not date_str:
+                        if image_path and Path(image_path).exists():
+                            date_str = extract_image_date(Path(image_path)) or 'unknown-date'
+                        else:
+                            date_str = 'unknown-date'
+
+                    # 撮影種ラベル決定: 未検出は「撮影無し」、それ以外は common_name 優先
+                    if (not species
+                            or (SpeciesDetectorDirect.is_no_detection_label(species)
+                                and SpeciesDetectorDirect.is_no_detection_label(common_name))):
+                        label = NO_DETECTION_PIVOT_LABEL
+                    elif common_name and not SpeciesDetectorDirect.is_no_detection_label(common_name):
+                        label = common_name
+                    else:
+                        label = species
+
+                    counts[date_str][label] += 1
+                    if label not in species_seen:
+                        species_seen.add(label)
+                        species_order.append(label)
+
+            # 日付列のソート (unknown-date は末尾)
+            dates_sorted = sorted(
+                counts.keys(),
+                key=lambda d: (d == 'unknown-date', d),
+            )
+
+            # 行の並び: 撮影無しを先頭、その後は検出回数の多い順（合計撮影枚数降順）
+            totals_by_species: Dict[str, int] = defaultdict(int)
+            for date_counts in counts.values():
+                for sp, c in date_counts.items():
+                    totals_by_species[sp] += c
+
+            detection_species = [s for s in species_order if s != NO_DETECTION_PIVOT_LABEL]
+            detection_species.sort(key=lambda s: (-totals_by_species[s], s))
+
+            with open(pivot_path, 'w', newline='', encoding='utf-8') as out:
+                writer = csv.writer(out)
+
+                # ヘッダー行
+                writer.writerow(['日付'] + dates_sorted)
+
+                # 合計撮影枚数 (日付ごとの総画像数)
+                total_row = ['合計撮影枚数']
+                for d in dates_sorted:
+                    total_row.append(sum(counts[d].values()))
+                writer.writerow(total_row)
+
+                # 撮影無し
+                if NO_DETECTION_PIVOT_LABEL in totals_by_species:
+                    no_det_row = [NO_DETECTION_PIVOT_LABEL]
+                    for d in dates_sorted:
+                        no_det_row.append(counts[d].get(NO_DETECTION_PIVOT_LABEL, 0))
+                    writer.writerow(no_det_row)
+
+                # 撮影種行
+                for sp in detection_species:
+                    row = [sp]
+                    for d in dates_sorted:
+                        row.append(counts[d].get(sp, 0))
+                    writer.writerow(row)
+
+                # 合計行
+                sum_row = ['合計']
+                for d in dates_sorted:
+                    sum_row.append(sum(counts[d].values()))
+                writer.writerow(sum_row)
+
+            self.logger.info(f"日付×種別ピボット出力完了: {pivot_path}")
+            return str(pivot_path)
+
+        except Exception as e:
+            self.logger.error(f"ピボット出力エラー: {str(e)}")
             raise
 
     def export_species_list(self, results: List[DetectionResult]) -> str:

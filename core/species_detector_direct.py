@@ -136,94 +136,156 @@ class SpeciesDetectorDirect:
         """単一画像の検出処理"""
         return self.predict_batch([image_path])[0]
 
+    # SpeciesNet class名 → 表示カテゴリのマッピング
+    _CATEGORY_MAP = {
+        'aves': 'bird',
+        'mammalia': 'mammal',
+        'reptilia': 'reptile',
+        'amphibia': 'amphibian',
+        'actinopterygii': 'fish',
+        'insecta': 'insect',
+    }
+
+    # SpeciesNet が動物不在/判定不能を示す際の特殊ラベル（全て lowercase 比較）
+    _NO_DETECTION_LABELS = {'blank', 'no cv result', 'no_cv_result'}
+
+    @classmethod
+    def is_no_detection_label(cls, value: str) -> bool:
+        """species/common_name が「未検出」を意味する特殊値かどうか判定"""
+        if not value:
+            return True
+        return value.strip().lower() in cls._NO_DETECTION_LABELS
+
     def _create_detection_from_prediction(self, prediction: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """SpeciesNet予測結果から検出オブジェクトを作成"""
         try:
-            prediction_str = prediction.get('prediction', '')
             prediction_score = prediction.get('prediction_score', 0)
 
-            if prediction_score >= self.confidence_threshold:
-                species_info = self._parse_prediction_string(prediction_str)
+            if prediction_score < self.confidence_threshold:
+                return None
 
-                detection = {
-                    'species': species_info['species_name'],
-                    'scientific_name': species_info['scientific_name'],
-                    'confidence': float(prediction_score),
-                    'category': species_info['category'],
-                    'common_name': species_info['common_name'],
-                    'bbox': self._extract_bbox_from_detections(prediction.get('detections', [])),
-                    'source': prediction.get('prediction_source', 'classifier')
-                }
+            # 構造化キーを優先し、無い場合のみ prediction 文字列をパース
+            species_info = self._extract_species_info(prediction)
 
-                return detection
+            return {
+                'species': species_info['species_name'],
+                'scientific_name': species_info['scientific_name'],
+                'confidence': float(prediction_score),
+                'category': species_info['category'],
+                'common_name': species_info['common_name'],
+                'bbox': self._extract_bbox_from_detections(prediction.get('detections', [])),
+                'source': prediction.get('prediction_source', 'classifier')
+            }
 
+        except (KeyError, TypeError, ValueError) as e:
+            self.logger.warning(f"検出オブジェクト作成をスキップ (不正な予測データ): {e}")
             return None
 
-        except Exception as e:
-            self.logger.error(f"検出オブジェクト作成エラー: {e}")
-            return None
+    def _extract_species_info(self, prediction: Dict[str, Any]) -> Dict[str, str]:
+        """予測辞書から種情報を取り出す（構造化キー優先、文字列フォールバック）"""
+        # 構造化キー（将来SpeciesNetが個別キーを返すようになった場合に備える）
+        class_name = (prediction.get('class') or prediction.get('class_name') or '').strip()
+        genus = (prediction.get('genus') or '').strip()
+        species = (prediction.get('species') or '').strip()
+        common_name = (prediction.get('common_name') or '').strip()
+
+        # いずれか構造化キーがあれば、それを優先利用
+        if class_name or genus or species or common_name:
+            return self._build_species_info(class_name, genus, species, common_name,
+                                            fallback=prediction.get('prediction', ''))
+
+        # 文字列パース（現行のSpeciesNet仕様: UUID;class;order;family;genus;species;common_name）
+        return self._parse_prediction_string(prediction.get('prediction', ''))
+
+    def _build_species_info(self, class_name: str, genus: str, species: str,
+                            common_name: str, fallback: str = '') -> Dict[str, str]:
+        """分類情報から表示用の dict を組み立てる
+
+        species_name は「学名 (一般名)」形式で、両者が同一・片方のみ存在する場合は
+        重複を避ける。SpeciesNet の特殊ラベル (blank, no cv result) は未検出扱い。
+        """
+        category = self._CATEGORY_MAP.get(class_name.lower(), class_name.lower() or 'unknown')
+
+        # 特殊ラベル: 分類情報のすべて（非空のもの）が blank/no cv result なら未検出扱い
+        # - "uuid;;;;;;blank"            → common_name='blank' のみ → 未検出
+        # - "uuid;no cv;;;no cv;no cv;no cv" → 全て no cv → 未検出
+        taxo_values = [v for v in (class_name, genus, species, common_name) if v]
+        if taxo_values and all(self.is_no_detection_label(v) for v in taxo_values):
+            return {
+                'species_name': '',
+                'scientific_name': '',
+                'category': 'no_detection',
+                'common_name': '',
+            }
+
+        # 学名の組立
+        if genus and species:
+            sci_name = f"{genus.capitalize()} {species}"
+        elif genus:
+            sci_name = genus.capitalize()
+        elif common_name and not self.is_no_detection_label(common_name):
+            sci_name = common_name
+        else:
+            sci_name = fallback or 'Unknown'
+
+        # 表示名: 「英語 (日本語)」形式。common_name が sci_name と同一/包含関係なら単独表示
+        display_common = '' if self.is_no_detection_label(common_name) else common_name
+        if display_common and display_common.lower() != sci_name.lower():
+            species_name = f"{sci_name} ({display_common})"
+        else:
+            species_name = sci_name
+
+        return {
+            'species_name': species_name,
+            'scientific_name': sci_name,
+            'category': category,
+            'common_name': display_common,
+        }
 
     def _parse_prediction_string(self, prediction_str: str) -> Dict[str, str]:
-        """予測文字列から種情報を解析"""
-        try:
-            parts = prediction_str.split(';') if ';' in prediction_str else []
-
-            result = {
-                'species_name': 'Unknown',
-                'scientific_name': 'Unknown',
-                'category': 'unknown',
-                'common_name': ''
-            }
-
-            if len(parts) >= 7:
-                # UUID;class;order;family;genus;species;common_name
-                class_name = parts[1].strip() if len(parts) > 1 else ''
-                genus = parts[4].strip() if len(parts) > 4 else ''
-                species = parts[5].strip() if len(parts) > 5 else ''
-                common_name = parts[6].strip() if len(parts) > 6 else ''
-
-                # カテゴリ決定
-                if class_name == 'aves':
-                    result['category'] = 'bird'
-                elif class_name == 'mammalia':
-                    result['category'] = 'mammal'
-                elif class_name == 'reptilia':
-                    result['category'] = 'reptile'
-                else:
-                    result['category'] = class_name or 'unknown'
-
-                # 種名決定
-                if genus and species:
-                    result['species_name'] = f"{genus.capitalize()} {species}"
-                    result['scientific_name'] = f"{genus.capitalize()} {species}"
-                elif common_name:
-                    result['species_name'] = common_name
-                    result['scientific_name'] = common_name
-                else:
-                    result['species_name'] = prediction_str
-                    result['scientific_name'] = prediction_str
-
-                result['common_name'] = common_name
-
-            return result
-
-        except Exception as e:
-            self.logger.error(f"予測文字列解析エラー: {e}")
+        """予測文字列から種情報を解析（SpeciesNet セミコロン区切り仕様）"""
+        # 特殊ラベル（blank / no cv result など）や空文字は未検出扱い
+        if self.is_no_detection_label(prediction_str):
             return {
-                'species_name': prediction_str,
-                'scientific_name': prediction_str,
-                'category': 'unknown',
-                'common_name': ''
+                'species_name': '',
+                'scientific_name': '',
+                'category': 'no_detection',
+                'common_name': '',
             }
+
+        default = {
+            'species_name': prediction_str,
+            'scientific_name': prediction_str,
+            'category': 'unknown',
+            'common_name': ''
+        }
+
+        if ';' not in prediction_str:
+            return default
+
+        parts = [p.strip() for p in prediction_str.split(';')]
+
+        if len(parts) < 7:
+            self.logger.warning(
+                f"予測文字列のフィールド数が想定(7)と異なります (実際: {len(parts)}): {prediction_str!r}"
+            )
+            return default
+
+        # UUID;class;order;family;genus;species;common_name
+        _, class_name, _order, _family, genus, species, common_name = parts[:7]
+
+        return self._build_species_info(class_name, genus, species, common_name,
+                                        fallback=prediction_str)
 
     def _extract_bbox_from_detections(self, detections: List[Dict[str, Any]]) -> List[float]:
         """検出結果からバウンディングボックスを抽出"""
-        try:
-            if detections and len(detections) > 0:
-                best_detection = max(detections, key=lambda x: x.get('conf', 0))
-                return best_detection.get('bbox', [])
+        if not detections:
             return []
-        except Exception:
+        try:
+            best_detection = max(detections, key=lambda x: x.get('conf', 0))
+            return best_detection.get('bbox', [])
+        except (TypeError, ValueError) as e:
+            self.logger.warning(f"bbox抽出に失敗 (不正な検出データ): {e}")
             return []
 
     def cleanup(self):

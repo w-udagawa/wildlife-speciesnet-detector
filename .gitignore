@@ -36,6 +36,7 @@ debug_*.json
 # Output directories
 results/
 output/
+smoke_output/
 
 # Large files
 *.pkl

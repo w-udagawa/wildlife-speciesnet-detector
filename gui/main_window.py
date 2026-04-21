@@ -45,11 +45,13 @@ class ProcessingThread(QThread):
     processing_completed = Signal(dict)  # summary dict (not list)
     error_occurred = Signal(str, str)  # title, message
 
-    def __init__(self, processor: BatchProcessor, image_paths: List[str], output_dir: str):
+    def __init__(self, processor: BatchProcessor, image_paths: List[str], output_dir: str,
+                 resume_from_csv: Optional[str] = None):
         super().__init__()
         self.processor = processor
         self.image_paths = image_paths
         self.output_dir = output_dir
+        self.resume_from_csv = resume_from_csv
         self.summary = {}
 
     def run(self):
@@ -60,7 +62,9 @@ class ProcessingThread(QThread):
             self.processor.set_error_callback(self._on_error)
 
             # バッチ処理実行（ストリーミングモード - サマリーのみ返却）
-            self.summary = self.processor.process_images(self.image_paths, self.output_dir)
+            self.summary = self.processor.process_images(
+                self.image_paths, self.output_dir, resume_from_csv=self.resume_from_csv
+            )
 
             # 完了シグナル
             self.processing_completed.emit(self.summary)
@@ -102,9 +106,11 @@ class MainWindow(QMainWindow):
         self.results_csv_path = None
         self.results_summary = {}
 
-        # ページング用
+        # ページング用（メタデータは処理完了時に一度だけ集計しキャッシュ）
         self.current_page = 0
         self.total_results = 0
+        self._results_total_rows = 0
+        self._results_unique_species = 0
 
         # UI初期化
         self.init_ui()
@@ -194,7 +200,11 @@ class MainWindow(QMainWindow):
         self.copy_images_cb = QCheckBox("画像をコピー（チェックなしの場合は移動）")
         self.copy_images_cb.setChecked(self.config.copy_images_to_folders)
         output_layout.addWidget(self.copy_images_cb, 2, 0, 1, 2)
-        
+
+        self.organize_by_date_cb = QCheckBox("撮影日ごとにサブフォルダを作成（種別フォルダ配下）")
+        self.organize_by_date_cb.setChecked(self.config.organize_by_date)
+        output_layout.addWidget(self.organize_by_date_cb, 3, 0, 1, 2)
+
         layout.addWidget(output_group)
         
         # 処理開始ボタン
@@ -242,11 +252,7 @@ class MainWindow(QMainWindow):
         
         # 制御ボタン
         control_layout = QHBoxLayout()
-        
-        self.pause_btn = QPushButton("一時停止")
-        self.pause_btn.setEnabled(False)
-        control_layout.addWidget(self.pause_btn)
-        
+
         self.stop_btn = QPushButton("停止")
         self.stop_btn.clicked.connect(self.stop_processing)
         self.stop_btn.setEnabled(False)
@@ -335,6 +341,11 @@ class MainWindow(QMainWindow):
         self.export_summary_btn.clicked.connect(self.export_summary)
         self.export_summary_btn.setEnabled(False)
         export_layout.addWidget(self.export_summary_btn)
+
+        self.export_pivot_btn = QPushButton("日付×種別ピボット出力")
+        self.export_pivot_btn.clicked.connect(self.export_pivot)
+        self.export_pivot_btn.setEnabled(False)
+        export_layout.addWidget(self.export_pivot_btn)
 
         self.organize_files_btn = QPushButton("ファイル振り分け")
         self.organize_files_btn.clicked.connect(self.organize_files)
@@ -476,6 +487,8 @@ class MainWindow(QMainWindow):
         # ページングリセット
         self.current_page = 0
         self.total_results = 0
+        self._results_total_rows = 0
+        self._results_unique_species = 0
         self.results_csv_path = None
         self.results_summary = {}
 
@@ -541,20 +554,22 @@ class MainWindow(QMainWindow):
         has_csv = self.results_csv_path is not None
         self.export_csv_btn.setEnabled(has_csv)
         self.export_summary_btn.setEnabled(has_csv)
+        self.export_pivot_btn.setEnabled(has_csv)
         self.organize_files_btn.setEnabled(has_csv)
 
         total = summary.get('total_processed', 0)
         successful = summary.get('successful', 0)
+        skipped = summary.get('skipped', 0)
         stopped = summary.get('stopped', False)
 
-        self.log_message(f"処理が完了しました。{total}個の画像を処理しました")
+        skipped_msg = f" (スキップ: {skipped})" if skipped else ""
+        self.log_message(f"処理が完了しました。{total}個の画像を処理しました{skipped_msg}")
 
         # 自動振り分け処理（設定がONの場合）
         organize_result = None
         if self.create_folders_cb.isChecked() and self.results_csv_path:
             organize_result = self._auto_organize_files()
 
-        # 完了メッセージ
         status_msg = "（中断されました）" if stopped else ""
         organize_msg = ""
         if organize_result:
@@ -562,7 +577,7 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(self, "処理完了",
                                f"処理が完了しました{status_msg}\n"
-                               f"処理画像数: {total}\n"
+                               f"処理画像数: {total}{skipped_msg}\n"
                                f"検出成功: {successful}\n"
                                f"結果CSV: {self.results_csv_path or 'なし'}{organize_msg}")
     
@@ -579,9 +594,9 @@ class MainWindow(QMainWindow):
         csv_path = summary.get('csv_path')
         if csv_path:
             self.csv_path_label.setText(f"結果CSV: {os.path.basename(csv_path)}")
-            # 種数をCSVからカウント
-            species_count = self._count_unique_species_from_csv(csv_path)
-            self.unique_species_label.setText(f"検出種数: {species_count}")
+            # 総行数・種数を一度だけ集計してキャッシュ（ページ切替ごとの再スキャンを回避）
+            self._refresh_results_metadata(csv_path)
+            self.unique_species_label.setText(f"検出種数: {self._results_unique_species}")
         else:
             self.csv_path_label.setText("結果CSV: なし")
             self.unique_species_label.setText("検出種数: -")
@@ -590,19 +605,22 @@ class MainWindow(QMainWindow):
         self.current_page = 0
         self.load_results_page()
 
-    def _count_unique_species_from_csv(self, csv_path: str) -> int:
-        """CSVから検出種数をカウント"""
+    def _refresh_results_metadata(self, csv_path: str) -> None:
+        """CSV を1回スキャンして総行数・検出種数をキャッシュ"""
+        total_rows = 0
         species_set = set()
         try:
             with open(csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    total_rows += 1
                     species = row.get('species', '')
                     if species:
                         species_set.add(species)
-        except Exception:
-            pass
-        return len(species_set)
+        except OSError as e:
+            self.log_message(f"結果メタデータ取得失敗: {e}")
+        self._results_total_rows = total_rows
+        self._results_unique_species = len(species_set)
 
     def load_results_page(self):
         """現在のページの結果をCSVから読み込んで表示"""
@@ -616,18 +634,17 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # CSVから該当ページの行を読み込み
+            # CSVから該当ページの行のみ読み込み（end_row に達したら打ち切り）
             start_row = self.current_page * self.RESULTS_PER_PAGE
             end_row = start_row + self.RESULTS_PER_PAGE
 
             rows_to_display = []
-            total_rows = 0
-
             with open(self.results_csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for i, row in enumerate(reader):
-                    total_rows += 1
-                    if start_row <= i < end_row:
+                    if i >= end_row:
+                        break
+                    if i >= start_row:
                         rows_to_display.append(row)
 
             # テーブルに表示
@@ -656,15 +673,16 @@ class MainWindow(QMainWindow):
             # 列幅の調整
             self.results_table.resizeColumnsToContents()
 
-            # ページング情報の更新
-            total_pages = (total_rows + self.RESULTS_PER_PAGE - 1) // self.RESULTS_PER_PAGE
+            # ページング情報の更新（キャッシュされた総行数を利用）
+            total_rows = self._results_total_rows
+            total_pages = max(1, (total_rows + self.RESULTS_PER_PAGE - 1) // self.RESULTS_PER_PAGE)
             self.page_info_label.setText(f"ページ: {self.current_page + 1}/{total_pages} ({total_rows}件)")
 
             self.prev_page_btn.setEnabled(self.current_page > 0)
             self.next_page_btn.setEnabled(self.current_page < total_pages - 1)
 
-        except Exception as e:
-            self.log_message(f"結果読み込みエラー: {str(e)}")
+        except OSError as e:
+            self.log_message(f"結果読み込みエラー: {e}")
 
     def prev_page(self):
         """前のページへ"""
@@ -712,6 +730,24 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "サマリー出力エラー", f"サマリー出力中にエラーが発生しました:\n{str(e)}")
+
+    def export_pivot(self):
+        """日付×撮影種のピボットCSVを出力"""
+        if not self.results_csv_path or not os.path.exists(self.results_csv_path):
+            QMessageBox.warning(self, "エラー", "出力する結果がありません")
+            return
+
+        try:
+            exporter = CSVExporter(self.output_folder)
+            pivot_path = exporter.export_daily_species_pivot(self.results_csv_path)
+
+            QMessageBox.information(self, "ピボット出力完了",
+                                    f"日付×種別ピボットを出力しました:\n{pivot_path}")
+            self.log_message(f"ピボット出力完了: {pivot_path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "ピボット出力エラー",
+                                 f"ピボット出力中にエラーが発生しました:\n{str(e)}")
     
     def _auto_organize_files(self) -> Optional[Dict[str, Any]]:
         """自動ファイル振り分け（処理完了時に呼び出し）"""
@@ -722,10 +758,16 @@ class MainWindow(QMainWindow):
             self.log_message("ファイル振り分けを開始...")
             file_manager = FileManager(self.output_folder)
             copy_files = self.copy_images_cb.isChecked()
+            organize_by_date = self.organize_by_date_cb.isChecked()
+
+            def _on_organize_progress(processed: int, total: int, current_path: str):
+                if total > 0:
+                    self.log_message(f"振り分け中: {processed}/{total} ({os.path.basename(current_path)})")
 
             # CSVから振り分け実行
             organization_map = file_manager.organize_images_by_species_from_csv(
-                self.results_csv_path, copy_files
+                self.results_csv_path, copy_files, organize_by_date=organize_by_date,
+                progress_callback=_on_organize_progress,
             )
 
             summary_path = file_manager.create_species_summary_file(organization_map)
@@ -771,6 +813,7 @@ class MainWindow(QMainWindow):
         self.config.use_gpu = self.use_gpu_cb.isChecked()
         self.config.create_species_folders = self.create_folders_cb.isChecked()
         self.config.copy_images_to_folders = self.copy_images_cb.isChecked()
+        self.config.organize_by_date = self.organize_by_date_cb.isChecked()
     
     def save_settings(self):
         """設定保存"""
@@ -798,6 +841,7 @@ class MainWindow(QMainWindow):
         self.use_gpu_cb.setChecked(self.config.use_gpu)
         self.create_folders_cb.setChecked(self.config.create_species_folders)
         self.copy_images_cb.setChecked(self.config.copy_images_to_folders)
+        self.organize_by_date_cb.setChecked(self.config.organize_by_date)
     
     def show_error(self, title: str, message: str):
         """エラー表示"""
