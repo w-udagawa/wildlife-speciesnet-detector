@@ -10,8 +10,8 @@ Wildlife Detector 設定管理モジュール
 
 設定項目:
     - 検出設定（信頼度閾値、バッチサイズ、地域フィルター）
-    - パフォーマンス設定（ワーカー数、GPU使用）
-    - メモリ管理設定（GC間隔、中間保存間隔）
+    - パフォーマンス設定（GPU使用）
+    - メモリ管理設定（GC間隔、予測チャンクサイズ、連続エラー上限）
 """
 import json
 import logging
@@ -28,7 +28,6 @@ class AppConfig:
     confidence_threshold: float = 0.1
     batch_size: int = 32
     country_filter: str = "JPN"
-    max_workers: int = 2  # WSL2環境向けに2に削減（旧: 4）
     use_gpu: bool = False
 
     # 出力設定
@@ -42,7 +41,6 @@ class AppConfig:
     theme: str = "default"
 
     # 大量画像処理向けメモリ管理設定
-    intermediate_save_interval: int = 100  # 中間保存間隔（枚数、旧版互換用、現在はチャンク境界で保存）
     gc_interval: int = 50  # ガベージコレクション間隔（枚数）
     consecutive_error_limit: int = 3  # 連続エラー上限（API例外のみカウント、超えると処理中断）
     run_mode: str = "multi_thread"  # SpeciesNet APIの実行モード（"multi_thread" or "single"）

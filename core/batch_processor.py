@@ -124,7 +124,6 @@ class BatchProcessor:
 
         # メモリ管理設定（configから取得、なければデフォルト値）
         self.gc_interval = getattr(config, 'gc_interval', 50) if config else 50
-        self.intermediate_save_interval = getattr(config, 'intermediate_save_interval', 100) if config else 100
         self.consecutive_error_limit = getattr(config, 'consecutive_error_limit', 3) if config else 3
         self.batch_size = getattr(config, 'batch_size', 32) if config else 32
         self.predict_chunk_size = getattr(config, 'predict_chunk_size', 500) if config else 500

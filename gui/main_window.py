@@ -254,6 +254,7 @@ class MainWindow(QMainWindow):
         control_layout = QHBoxLayout()
 
         self.stop_btn = QPushButton("停止")
+        self.stop_btn.setToolTip("現在処理中のチャンクの完了を待ってから停止します")
         self.stop_btn.clicked.connect(self.stop_processing)
         self.stop_btn.setEnabled(False)
         control_layout.addWidget(self.stop_btn)
@@ -390,16 +391,10 @@ class MainWindow(QMainWindow):
         # パフォーマンス設定
         performance_group = QGroupBox("パフォーマンス設定")
         performance_layout = QGridLayout(performance_group)
-        
-        performance_layout.addWidget(QLabel("最大ワーカー数:"), 0, 0)
-        self.workers_spin = QSpinBox()
-        self.workers_spin.setRange(1, 16)
-        self.workers_spin.setValue(self.config.max_workers)
-        performance_layout.addWidget(self.workers_spin, 0, 1)
-        
+
         self.use_gpu_cb = QCheckBox("GPU使用")
         self.use_gpu_cb.setChecked(self.config.use_gpu)
-        performance_layout.addWidget(self.use_gpu_cb, 1, 0, 1, 2)
+        performance_layout.addWidget(self.use_gpu_cb, 0, 0, 1, 2)
         
         layout.addWidget(performance_group)
         
@@ -426,7 +421,6 @@ class MainWindow(QMainWindow):
         self.confidence_spin.valueChanged.connect(self.update_config)
         self.batch_size_spin.valueChanged.connect(self.update_config)
         self.country_combo.currentTextChanged.connect(self.update_config)
-        self.workers_spin.valueChanged.connect(self.update_config)
         self.use_gpu_cb.toggled.connect(self.update_config)
     
     def select_files(self):
@@ -505,7 +499,7 @@ class MainWindow(QMainWindow):
         """処理停止"""
         if self.processing_thread and self.processing_thread.isRunning():
             self.processing_thread.stop_processing()
-            self.log_message("処理停止要求を送信しました...")
+            self.log_message("処理停止を要求しました（現在のチャンクの完了後に停止します）")
             
             # スレッドの終了を待機
             self.processing_thread.wait(5000)  # 5秒でタイムアウト
@@ -809,7 +803,6 @@ class MainWindow(QMainWindow):
         self.config.confidence_threshold = self.confidence_spin.value()
         self.config.batch_size = self.batch_size_spin.value()
         self.config.country_filter = self.country_combo.currentText()
-        self.config.max_workers = self.workers_spin.value()
         self.config.use_gpu = self.use_gpu_cb.isChecked()
         self.config.create_species_folders = self.create_folders_cb.isChecked()
         self.config.copy_images_to_folders = self.copy_images_cb.isChecked()
@@ -837,7 +830,6 @@ class MainWindow(QMainWindow):
         self.confidence_spin.setValue(self.config.confidence_threshold)
         self.batch_size_spin.setValue(self.config.batch_size)
         self.country_combo.setCurrentText(self.config.country_filter)
-        self.workers_spin.setValue(self.config.max_workers)
         self.use_gpu_cb.setChecked(self.config.use_gpu)
         self.create_folders_cb.setChecked(self.config.create_species_folders)
         self.copy_images_cb.setChecked(self.config.copy_images_to_folders)

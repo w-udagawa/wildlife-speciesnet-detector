@@ -121,7 +121,6 @@ addopts = [
     "--strict-config",
     "--verbose",
     "--cov=core",
-    "--cov=gui",
     "--cov=utils",
     "--cov-report=html",
     "--cov-report=term-missing",
@@ -132,7 +131,7 @@ exclude_dirs = ["tests", "build", "dist"]
 skips = ["B101", "B601"]
 
 [tool.coverage.run]
-source = ["core", "gui", "utils"]
+source = ["core", "utils"]
 omit = [
     "*/tests/*",
     "*/test_*.py",

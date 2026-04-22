@@ -79,7 +79,6 @@ def main() -> int:
     config = AppConfig(
         confidence_threshold=args.confidence,
         predict_chunk_size=50,  # スモークテスト向けに小さめ
-        intermediate_save_interval=10,
     )
 
     processor = BatchProcessor(config)
