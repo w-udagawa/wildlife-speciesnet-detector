@@ -32,11 +32,22 @@ Desktop.ini
 *.temp
 test_results.json
 debug_*.json
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Claude Code local state
+.claude/
 
 # Output directories
 results/
 output/
 smoke_output/
+
+# PyInstaller build outputs
+build/
+dist/
+*.spec.bak
 
 # Large files
 *.pkl

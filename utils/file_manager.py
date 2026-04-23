@@ -136,7 +136,7 @@ class FileManager:
         # 進捗表示用に総行数を1度数える（10K件で ~10ms）
         total_rows = 0
         try:
-            with open(csv_path, 'r', encoding='utf-8') as f:
+            with open(csv_path, 'r', encoding='utf-8-sig') as f:
                 total_rows = sum(1 for _ in f) - 1  # ヘッダー除く
                 total_rows = max(0, total_rows)
         except OSError:
@@ -145,7 +145,7 @@ class FileManager:
         try:
             processed = 0
             # CSVを1行ずつ読み込んで処理（メモリ効率化）
-            with open(csv_path, 'r', encoding='utf-8') as f:
+            with open(csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
 
                 for row in reader:

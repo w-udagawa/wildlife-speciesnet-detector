@@ -80,7 +80,7 @@ class TestResume:
         assert summary['csv_path'] == str(existing)
 
         # CSV に5件（既存3 + 新規2）が入っている
-        with open(existing, encoding='utf-8') as f:
+        with open(existing, encoding='utf-8-sig') as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 5
 
@@ -131,7 +131,7 @@ class TestCsvHeader:
             summary = processor.process_images(tmp_images, output_dir=str(tmp_path))
 
         # CSV 1行目はヘッダー、以降にデータ5行 (ヘッダー重複なし)
-        with open(summary['csv_path'], encoding='utf-8') as f:
+        with open(summary['csv_path'], encoding='utf-8-sig') as f:
             lines = f.readlines()
         assert lines[0].startswith('image_path,image_name,image_date,')
         assert lines.count(lines[0]) == 1  # ヘッダーは1行のみ
@@ -141,7 +141,7 @@ class TestCsvHeader:
         with patch('core.batch_processor.SpeciesDetector', lambda config: FakeDetector(config)):
             summary = processor.process_images(tmp_images, output_dir=str(tmp_path))
 
-        with open(summary['csv_path'], encoding='utf-8') as f:
+        with open(summary['csv_path'], encoding='utf-8-sig') as f:
             rows = list(csv.DictReader(f))
         # mtime fallback で全行に YYYY-MM-DD 形式の日付が入る
         for r in rows:

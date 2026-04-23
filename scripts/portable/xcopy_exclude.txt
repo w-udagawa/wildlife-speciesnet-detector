@@ -1,0 +1,15 @@
+\__pycache__\
+\.pytest_cache\
+\htmlcov\
+\tests\
+\smoke_output\
+\wildlife_env\
+\wildlife_env_312\
+\build\
+\dist\
+\scripts\
+.pyc
+.pyo
+.spec
+.coverage
+\6.0

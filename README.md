@@ -114,11 +114,19 @@ wildlife-speciesnet-detector/
 │   ├── test_batch_processor_resume.py
 │   └── test_organize_progress_and_paths.py
 ├── scripts/
-│   └── smoke_test.py              # CLI スモークテスト（動作確認 / ベンチマーク）
+│   ├── smoke_test.py              # CLI スモークテスト（動作確認 / ベンチマーク）
+│   ├── build_portable.bat         # 配布用ポータブル版ビルド（推奨）
+│   ├── build_exe.bat              # PyInstaller .exe ビルド（レガシー）
+│   └── portable/                  # 配布 zip 用テンプレート
+│       ├── WildlifeDetector.bat       # 配布版 GUI 起動ランチャー
+│       ├── WildlifeDetector-debug.bat # 配布版 デバッグ起動（コンソール付き）
+│       ├── README_ja.txt              # 受け取り手向け手順書（配布時にルートへコピー）
+│       └── xcopy_exclude.txt          # アプリコピー時の除外リスト
 ├── main.py                        # エントリーポイント
 ├── pyproject.toml                 # プロジェクト設定・ツール設定
 ├── requirements.txt               # 実行時依存関係
-└── requirements-dev.txt           # 開発用依存関係
+├── requirements-dev.txt           # 開発用依存関係
+└── wildlife_detector.spec         # PyInstaller spec（レガシー）
 ```
 
 ## 設定オプション
@@ -251,6 +259,113 @@ pytest tests/
 - `CSVExporter` のストリーミング集計・日付×種別ピボット
 - `extract_image_date` の EXIF 解釈 (DateTimeOriginal / DateTimeDigitized / DateTime / mtime 優先順)
 
+## Windows 配布用ポータブル版のビルド（推奨）
+
+非エンジニアのユーザーに配布するための **Windows Embeddable Python + 依存ライブラリ同梱の zip** を生成できます。PyInstaller を使わないため、ウイルス対策ソフトの誤検知や実行時の hidden-import 取りこぼしが発生しにくく、実機で検証済みの Python 環境がそのまま配布先で動きます。
+
+### 前提
+- Windows 10/11
+- インターネット接続（Embeddable Python と依存ライブラリのダウンロードに使用）
+- ビルドは **Windows ネイティブの PowerShell / cmd** で実行（WSL 不可）
+- Windows 10/11 標準の `curl` / `tar` / `powershell` を使用（追加ツール不要）
+
+### ビルド
+
+```cmd
+scripts\build_portable.bat
+```
+
+初回ビルドは TensorFlow 等の依存 DL で 5〜15 分かかります。2回目以降は `build\cache\` のキャッシュが効くため高速です。
+
+完了後：
+
+```
+dist\
+└── WildlifeDetector_v2.1.0_portable.zip   ← これを配布
+```
+
+解凍後の構成：
+
+```
+WildlifeDetector_v2.1.0_portable/
+├── WildlifeDetector.bat           ← ユーザーはこれをダブルクリック
+├── WildlifeDetector-debug.bat     ← トラブル時のコンソール起動
+├── README_ja.txt                  ← 配布向けの使い方・トラブル対処
+├── runtime/                       ← Embeddable Python + site-packages
+└── app/                           ← main.py, core/, gui/, utils/
+```
+
+### 配布
+
+1. `dist\WildlifeDetector_v2.1.0_portable.zip` を受け取り手に渡す（GitHub Releases / 社内ファイル共有 / OneDrive リンク等）
+2. 受け取った人は zip を任意のフォルダに解凍
+3. `WildlifeDetector.bat` をダブルクリックで起動
+
+### 受け取った人が必要なもの
+
+- Windows 10/11 (64bit)
+- 8GB 以上の RAM
+- 空き容量 5GB 以上
+- ネットワーク接続（**初回起動時のみ** SpeciesNet モデル数百MBを自動DL）
+- Python のインストールは**不要**
+
+### サイズ見積もり
+
+- 解凍後: 約 900MB〜1.2GB（TensorFlow CPU 版を含むため）
+- zip: 約 400〜600MB
+
+### 注意
+
+- 初回起動時のモデル DL 先は `%USERPROFILE%\.cache\` のユーザー領域
+- 受け取り手のログは `%USERPROFILE%\WildlifeDetector\logs\wildlife_detector.log`
+- 解凍フォルダの削除だけでアンインストール可能（レジストリ未使用）
+- Qt プラグインで起動失敗する場合は "Microsoft Visual C++ 2015-2022 再頒布可能パッケージ" の導入を案内してください
+
+---
+
+## 【レガシー】Windows 配布用 .exe のビルド（非推奨）
+
+> ⚠️ **非推奨**: この PyInstaller 方式は検証環境によっては **検出結果が 0 件になる既知の不具合** が報告されています（spec の collect_all / copy_metadata では speciesnet の推移的依存を完全に追い切れないことが原因の可能性）。新規配布にはこの節ではなく、上の「Windows 配布用ポータブル版のビルド」を使用してください。以下は `wildlife_detector.spec` を利用した従来手順として残しています。
+
+### 前提
+- Windows 10/11
+- README の手順で `wildlife_env` を作成済み・依存導入済み
+- ビルドは **Windows ネイティブの PowerShell / cmd** で実行（WSL では cross-compile 不可）
+
+### ビルド
+
+```cmd
+scripts\build_exe.bat
+```
+
+ビルドは数分〜十数分かかります（TensorFlow を含むため）。完了後：
+
+```
+dist\WildlifeDetector\
+├── WildlifeDetector.exe   ← これをダブルクリックで起動
+├── _internal\             ← 同梱DLL・データ
+└── ...
+```
+
+### 配布
+
+1. `dist\WildlifeDetector\` フォルダ全体を zip 圧縮
+2. GitHub Releases に zip を添付してアップロード
+3. 受け取った人は zip を解凍 → `WildlifeDetector.exe` をダブルクリック
+
+### 受け取った人が必要なもの
+
+- Windows 10/11
+- 8GB 以上の RAM
+- ネットワーク接続（**初回起動時のみ** SpeciesNet モデル数百MBを自動DL）
+- Python のインストールは**不要**
+
+### 注意
+
+- ファイルサイズは onedir 全体で 1〜3GB 程度（TensorFlow 同梱のため）
+- 初回起動時のモデル DL 先は `%USERPROFILE%\.cache\` 等のユーザー領域
+- ウイルス対策ソフトが PyInstaller 製 .exe を誤検知することがあります。配布時は事前に Microsoft Defender 等での検証を推奨
+
 ## トラブルシューティング
 
 ### speciesnet の import に失敗する
@@ -274,6 +389,29 @@ pip install --force-reinstall speciesnet
 ### Python 3.12+ の venv で setuptools が自動的に 82+ になる
 
 Python 3.12 以降の `python -m venv` は setuptools 82+ をバンドルする場合があります。仮想環境作成後、最初に `pip install "setuptools<81"` を実行してください。
+
+### ポータブル版（配布 zip）関連のトラブル
+
+配布を受け取った側で起きやすい問題と対処です。
+
+**起動直後に何も表示されず終了する / アイコンが一瞬出て消える**
+
+`WildlifeDetector-debug.bat` を実行してコンソールのエラーメッセージを確認してください。多くは以下のいずれかです。
+
+- `Could not find the Qt platform plugin "windows"`
+  → "Microsoft Visual C++ 2015-2022 再頒布可能パッケージ (x64)" を Microsoft から導入してください。
+- `ModuleNotFoundError: No module named 'xxx'`
+  → zip の解凍が不完全な可能性があります。別のフォルダに解凍し直してください（パスに日本語が含まれていて失敗する一部の解凍ツールに注意）。
+
+**検出処理を開始しても 0 件になる**
+
+- `%USERPROFILE%\WildlifeDetector\logs\wildlife_detector.log` を確認し、`speciesnet - OK` の行が出ているか確認してください。
+- 初回起動時のモデル DL が失敗している可能性があります。`%USERPROFILE%\.cache\` を一旦削除して `WildlifeDetector-debug.bat` から再起動するとログで DL の成否を確認できます。
+- 企業プロキシ環境では kagglehub / huggingface_hub からのモデル取得が失敗することがあります。ネットワーク管理者に `*.kaggle.com` / `*.huggingface.co` への HTTPS 到達性を確認してもらってください。
+
+**「ウイルスの可能性」と表示される**
+
+ポータブル版は PyInstaller を使っていないため exe 単体の署名なしバイナリはありませんが、企業の EDR 製品によっては `pythonw.exe` の挙動自体を検知することがあります。社内 IT 部門に Wildlife Detector の解凍先フォルダを除外設定に追加してもらってください。
 
 ## ライセンス
 

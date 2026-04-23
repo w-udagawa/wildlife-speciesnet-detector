@@ -26,7 +26,7 @@ def _set_mtime(path: Path, year: int, month: int, day: int) -> None:
 
 
 def _read_pivot(path: Path) -> list[list[str]]:
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         return list(csv.reader(f))
 
 

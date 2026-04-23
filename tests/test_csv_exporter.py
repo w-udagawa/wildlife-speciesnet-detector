@@ -21,7 +21,7 @@ def _write_results_csv(path: Path, rows: list[dict]) -> None:
 def _read_summary_as_dict(path: Path) -> dict[str, str]:
     """基本統計セクションの項目→値辞書を組み立てる"""
     stats: dict[str, str] = {}
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         in_basic_section = False
         for row in reader:

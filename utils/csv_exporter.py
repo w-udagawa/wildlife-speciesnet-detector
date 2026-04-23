@@ -43,7 +43,7 @@ class CSVExporter:
         csv_path = self.output_dir / csv_filename
         
         try:
-            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 fieldnames = [
                     '画像ファイル名',
                     '画像パス',
@@ -127,7 +127,7 @@ class CSVExporter:
                     species_count[species] = species_count.get(species, 0) + 1
                     category_count[category] = category_count.get(category, 0) + 1
             
-            with open(summary_path, 'w', newline='', encoding='utf-8') as csvfile:
+            with open(summary_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.writer(csvfile)
                 
                 # ヘッダー
@@ -226,7 +226,7 @@ class CSVExporter:
                 '0.0-0.3 (非常に低い)': 0
             }
 
-            with open(source_csv_path, 'r', encoding='utf-8') as f:
+            with open(source_csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
 
                 for row in reader:
@@ -261,7 +261,7 @@ class CSVExporter:
                             confidence_ranges['0.0-0.3 (非常に低い)'] += 1
 
             # サマリーCSVの出力
-            with open(summary_path, 'w', newline='', encoding='utf-8') as csvfile:
+            with open(summary_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.writer(csvfile)
 
                 # ヘッダー
@@ -344,7 +344,7 @@ class CSVExporter:
         species_seen: set = set()
 
         try:
-            with open(source_csv_path, 'r', encoding='utf-8') as f:
+            with open(source_csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     image_path = (row.get('image_path') or '').strip()
@@ -389,7 +389,7 @@ class CSVExporter:
             detection_species = [s for s in species_order if s != NO_DETECTION_PIVOT_LABEL]
             detection_species.sort(key=lambda s: (-totals_by_species[s], s))
 
-            with open(pivot_path, 'w', newline='', encoding='utf-8') as out:
+            with open(pivot_path, 'w', newline='', encoding='utf-8-sig') as out:
                 writer = csv.writer(out)
 
                 # ヘッダー行
@@ -465,7 +465,7 @@ class CSVExporter:
                 if info['confidences']:
                     info['avg_confidence'] = sum(info['confidences']) / len(info['confidences'])
             
-            with open(species_path, 'w', newline='', encoding='utf-8') as csvfile:
+            with open(species_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 fieldnames = [
                     '種名',
                     '一般名',

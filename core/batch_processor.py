@@ -170,7 +170,7 @@ class BatchProcessor:
         if not csv_path.exists():
             return processed
         try:
-            with open(csv_path, 'r', encoding='utf-8') as f:
+            with open(csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     p = (row.get('image_path') or '').strip()
@@ -380,7 +380,7 @@ class BatchProcessor:
         extract_image_date = _get_extract_image_date()
         try:
             mode = 'a' if self._csv_header_written else 'w'
-            with open(self.intermediate_save_path, mode, newline='', encoding='utf-8') as f:
+            with open(self.intermediate_save_path, mode, newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
 
                 # ヘッダー（初回のみ、フラグで明示管理）
