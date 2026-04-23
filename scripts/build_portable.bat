@@ -122,7 +122,7 @@ if errorlevel 1 (
 
 REM --- 以前のビルドで tensorflow-cpu を入れていた場合に備え、部分インストール残骸を除去 ---
 REM speciesnet >= 1.0 は PyTorch 系で tensorflow を必要としないため明示導入は行わない。
-echo [10/15] 旧 tensorflow 残骸の掃除...
+echo [10/15] stale tensorflow files cleanup...
 if exist "%BUILD_DIR%\runtime\Lib\site-packages\tensorflow" rmdir /s /q "%BUILD_DIR%\runtime\Lib\site-packages\tensorflow"
 if exist "%BUILD_DIR%\runtime\Lib\site-packages\tensorflow_cpu" rmdir /s /q "%BUILD_DIR%\runtime\Lib\site-packages\tensorflow_cpu"
 

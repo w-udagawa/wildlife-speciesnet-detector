@@ -2,8 +2,8 @@
 chcp 65001 > nul
 setlocal
 REM Wildlife Detector - portable launcher (DEBUG, with console)
-REM 通常は WildlifeDetector.bat を使ってください。
-REM このファイルは起動トラブル時に Python のエラーメッセージを目視するためのものです。
+REM For normal use, run WildlifeDetector.bat instead.
+REM This launcher shows Python error messages in a console window for troubleshooting.
 
 set "ROOT=%~dp0"
 set "PYTHONHOME=%ROOT%runtime"
