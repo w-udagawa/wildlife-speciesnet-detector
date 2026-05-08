@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wildlife-detector"
-version = "2.1.0"
+version = "2.2.0"
 description = "Google SpeciesNetを使用した高精度野生生物検出デスクトップアプリケーション"
 authors = [
     {name = "Wildlife Detector Team", email = "your-email@example.com"}

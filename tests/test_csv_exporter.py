@@ -3,6 +3,7 @@ import csv
 from pathlib import Path
 
 from core.batch_processor import ProcessingStats
+from core.species_detector_direct import DetectionResult
 from utils.csv_exporter import CSVExporter
 
 
@@ -83,3 +84,74 @@ class TestExportSummaryFromCsv:
         summary_path = Path(exporter.export_summary_from_csv(str(src), ProcessingStats()))
         # 0未満として集計されるが例外は出ない
         assert summary_path.exists()
+
+    def test_category_translated_to_japanese_in_summary(self, tmp_path: Path):
+        """サマリーCSVのカテゴリ統計が日本語化される"""
+        src = tmp_path / "src.csv"
+        _write_results_csv(src, [
+            {"image_path": "/a.jpg", "image_name": "a.jpg", "species": "X",
+             "scientific_name": "X", "confidence": "0.9", "category": "bird",
+             "common_name": "", "timestamp": ""},
+            {"image_path": "/b.jpg", "image_name": "b.jpg", "species": "Y",
+             "scientific_name": "Y", "confidence": "0.8", "category": "mammal",
+             "common_name": "", "timestamp": ""},
+        ])
+
+        exporter = CSVExporter(str(tmp_path))
+        summary_path = Path(exporter.export_summary_from_csv(str(src), ProcessingStats()))
+
+        with open(summary_path, encoding="utf-8-sig") as f:
+            text = f.read()
+        assert "鳥類" in text
+        assert "哺乳類" in text
+
+
+class TestExportResults:
+    def test_japanese_name_column_added(self, tmp_path: Path):
+        """詳細CSVに 和名_N 列が追加され、カテゴリが日本語化される"""
+        result = DetectionResult("/img.jpg", [{
+            "species": "Corvus macrorhynchos",
+            "scientific_name": "Corvus macrorhynchos",
+            "common_name": "large-billed crow",
+            "japanese_name": "ハシブトガラス",
+            "confidence": 0.9,
+            "category": "bird",
+        }])
+
+        exporter = CSVExporter(str(tmp_path))
+        out = Path(exporter.export_results([result]))
+
+        with open(out, encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            fieldnames = reader.fieldnames or []
+
+        assert "和名_1" in fieldnames
+        assert rows[0]["和名_1"] == "ハシブトガラス"
+        assert rows[0]["一般名_1"] == "large-billed crow"
+        assert rows[0]["カテゴリ_1"] == "鳥類"
+
+
+class TestExportSpeciesList:
+    def test_japanese_name_column_in_species_list(self, tmp_path: Path):
+        """種リストCSVに 和名 列が出る + カテゴリ日本語化"""
+        result = DetectionResult("/img.jpg", [{
+            "species": "Corvus macrorhynchos",
+            "scientific_name": "Corvus macrorhynchos",
+            "common_name": "large-billed crow",
+            "japanese_name": "ハシブトガラス",
+            "confidence": 0.9,
+            "category": "bird",
+        }])
+
+        exporter = CSVExporter(str(tmp_path))
+        out = Path(exporter.export_species_list([result]))
+
+        with open(out, encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            fieldnames = reader.fieldnames or []
+
+        assert "和名" in fieldnames
+        assert rows[0]["和名"] == "ハシブトガラス"
+        assert rows[0]["カテゴリ"] == "鳥類"

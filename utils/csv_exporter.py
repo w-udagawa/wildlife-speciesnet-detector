@@ -24,6 +24,7 @@ import logging
 from core.species_detector_direct import DetectionResult, SpeciesDetectorDirect
 from core.batch_processor import ProcessingStats
 from utils.image_meta import extract_image_date
+from utils.japanese_names import get_translator
 
 # ピボット出力で未検出行に使うラベル
 NO_DETECTION_PIVOT_LABEL = "撮影無し"
@@ -42,6 +43,7 @@ class CSVExporter:
         csv_filename = f"wildlife_detection_results_{timestamp}.csv"
         csv_path = self.output_dir / csv_filename
         
+        translator = get_translator()
         try:
             with open(csv_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 fieldnames = [
@@ -50,26 +52,29 @@ class CSVExporter:
                     '検出日時',
                     '検出数',
                     '種名_1',
-                    '一般名_1', 
+                    '一般名_1',
+                    '和名_1',
                     '学名_1',
                     '信頼度_1',
                     'カテゴリ_1',
                     '種名_2',
                     '一般名_2',
-                    '学名_2', 
+                    '和名_2',
+                    '学名_2',
                     '信頼度_2',
                     'カテゴリ_2',
                     '種名_3',
                     '一般名_3',
+                    '和名_3',
                     '学名_3',
                     '信頼度_3',
                     'カテゴリ_3',
                     '備考'
                 ]
-                
+
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                
+
                 for result in results:
                     # 基本情報
                     row = {
@@ -79,14 +84,17 @@ class CSVExporter:
                         '検出数': len(result.detections),
                         '備考': ''
                     }
-                    
+
                     # 検出結果（最大3つまで）
                     for i, detection in enumerate(result.detections[:3], 1):
+                        japanese = detection.get('japanese_name', '') or translator.translate_species(
+                            detection.get('scientific_name', ''))
                         row[f'種名_{i}'] = detection.get('species', '')
                         row[f'一般名_{i}'] = detection.get('common_name', '')
+                        row[f'和名_{i}'] = japanese
                         row[f'学名_{i}'] = detection.get('scientific_name', '')
                         row[f'信頼度_{i}'] = f"{detection.get('confidence', 0):.4f}"
-                        row[f'カテゴリ_{i}'] = detection.get('category', '')
+                        row[f'カテゴリ_{i}'] = translator.translate_category(detection.get('category', ''))
                     
                     # 検出がない場合の備考
                     if not result.has_detections():
@@ -160,19 +168,20 @@ class CSVExporter:
                 
                 # カテゴリ統計
                 if category_count:
+                    translator = get_translator()
                     writer.writerow(['カテゴリ別統計'])
                     writer.writerow(['カテゴリ', '検出回数', '割合 (%)'])
-                    
+
                     sorted_categories = sorted(category_count.items(), key=lambda x: x[1], reverse=True)
                     for category, count in sorted_categories:
                         percentage = (count / total_detections * 100) if total_detections > 0 else 0
-                        writer.writerow([category, count, f"{percentage:.1f}"])
+                        writer.writerow([translator.translate_category(category), count, f"{percentage:.1f}"])
                     writer.writerow([])
-                
+
                 # 信頼度統計
                 writer.writerow(['信頼度統計'])
                 writer.writerow(['信頼度範囲', '検出数'])
-                
+
                 confidence_ranges = {
                     '0.9-1.0 (非常に高い)': 0,
                     '0.7-0.9 (高い)': 0,
@@ -295,13 +304,14 @@ class CSVExporter:
 
                 # カテゴリ統計
                 if category_count:
+                    translator = get_translator()
                     writer.writerow(['カテゴリ別統計'])
                     writer.writerow(['カテゴリ', '検出回数', '割合 (%)'])
 
                     sorted_categories = sorted(category_count.items(), key=lambda x: x[1], reverse=True)
                     for category, count in sorted_categories:
                         percentage = (count / total_detections * 100) if total_detections > 0 else 0
-                        writer.writerow([category, count, f"{percentage:.1f}"])
+                        writer.writerow([translator.translate_category(category), count, f"{percentage:.1f}"])
                     writer.writerow([])
 
                 # 信頼度統計
@@ -343,6 +353,7 @@ class CSVExporter:
         species_order: List[str] = []  # 初出順を保持
         species_seen: set = set()
 
+        translator = get_translator()
         try:
             with open(source_csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
@@ -350,6 +361,8 @@ class CSVExporter:
                     image_path = (row.get('image_path') or '').strip()
                     species = (row.get('species') or '').strip()
                     common_name = (row.get('common_name') or '').strip()
+                    japanese_name = (row.get('japanese_name') or '').strip()
+                    scientific_name = (row.get('scientific_name') or '').strip()
 
                     # 日付は CSV の image_date 列優先（EXIF再読込を回避）
                     date_str = (row.get('image_date') or '').strip()
@@ -359,15 +372,21 @@ class CSVExporter:
                         else:
                             date_str = 'unknown-date'
 
-                    # 撮影種ラベル決定: 未検出は「撮影無し」、それ以外は common_name 優先
+                    # 撮影種ラベル決定: 未検出は「撮影無し」、その他は和名 → 英common_name → 学名 の順
                     if (not species
                             or (SpeciesDetectorDirect.is_no_detection_label(species)
                                 and SpeciesDetectorDirect.is_no_detection_label(common_name))):
                         label = NO_DETECTION_PIVOT_LABEL
-                    elif common_name and not SpeciesDetectorDirect.is_no_detection_label(common_name):
-                        label = common_name
                     else:
-                        label = species
+                        # 旧CSV（japanese_name 列なし）は scientific_name から動的解決
+                        if not japanese_name and scientific_name:
+                            japanese_name = translator.translate_species(scientific_name)
+                        if japanese_name:
+                            label = japanese_name
+                        elif common_name and not SpeciesDetectorDirect.is_no_detection_label(common_name):
+                            label = common_name
+                        else:
+                            label = species
 
                     counts[date_str][label] += 1
                     if label not in species_seen:
@@ -433,63 +452,69 @@ class CSVExporter:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         species_filename = f"wildlife_species_list_{timestamp}.csv"
         species_path = self.output_dir / species_filename
-        
+
+        translator = get_translator()
         try:
             # 種情報の収集
             species_info = {}
-            
+
             for result in results:
                 for detection in result.detections:
                     species = detection.get('species', 'Unknown')
-                    
+                    scientific = detection.get('scientific_name', '')
+                    japanese = detection.get('japanese_name', '') or translator.translate_species(scientific)
+
                     if species not in species_info:
                         species_info[species] = {
                             'species': species,
                             'common_name': detection.get('common_name', ''),
-                            'scientific_name': detection.get('scientific_name', ''),
+                            'japanese_name': japanese,
+                            'scientific_name': scientific,
                             'category': detection.get('category', ''),
                             'detection_count': 0,
                             'max_confidence': 0,
                             'avg_confidence': 0,
                             'confidences': []
                         }
-                    
+
                     info = species_info[species]
                     info['detection_count'] += 1
                     confidence = detection.get('confidence', 0)
                     info['confidences'].append(confidence)
                     info['max_confidence'] = max(info['max_confidence'], confidence)
-            
+
             # 平均信頼度の計算
             for info in species_info.values():
                 if info['confidences']:
                     info['avg_confidence'] = sum(info['confidences']) / len(info['confidences'])
-            
+
             with open(species_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 fieldnames = [
                     '種名',
                     '一般名',
-                    '学名', 
+                    '和名',
+                    '学名',
                     'カテゴリ',
                     '検出回数',
                     '最高信頼度',
                     '平均信頼度'
                 ]
-                
+
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                
+
                 # 検出回数順でソート
-                sorted_species = sorted(species_info.values(), 
-                                      key=lambda x: x['detection_count'], 
+                sorted_species = sorted(species_info.values(),
+                                      key=lambda x: x['detection_count'],
                                       reverse=True)
-                
+
                 for info in sorted_species:
                     writer.writerow({
                         '種名': info['species'],
                         '一般名': info['common_name'],
+                        '和名': info['japanese_name'],
                         '学名': info['scientific_name'],
-                        'カテゴリ': info['category'],
+                        'カテゴリ': translator.translate_category(info['category']),
                         '検出回数': info['detection_count'],
                         '最高信頼度': f"{info['max_confidence']:.4f}",
                         '平均信頼度': f"{info['avg_confidence']:.4f}"

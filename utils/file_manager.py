@@ -25,6 +25,7 @@ import logging
 
 from core.species_detector_direct import DetectionResult, SpeciesDetectorDirect
 from utils.image_meta import extract_image_date  # 後方互換のため公開継続
+from utils.japanese_names import get_translator
 
 # 未検出扱いのファイルを格納するフォルダ名（CSV未検出 / blank / no cv result を統一）
 NO_DETECTION_FOLDER = "未検出_No_Detection"
@@ -67,13 +68,14 @@ class FileManager:
                     best_detection = result.get_best_detection()
                     species_name = best_detection.get('species', '') or ''
                     common_name = best_detection.get('common_name', '') or ''
+                    japanese_name = best_detection.get('japanese_name', '') or ''
 
                     if (SpeciesDetectorDirect.is_no_detection_label(species_name)
                             and SpeciesDetectorDirect.is_no_detection_label(common_name)):
                         # SpeciesNet が blank/no cv result を返したケースも未検出に統一
                         folder_name = NO_DETECTION_FOLDER
                     else:
-                        folder_name = self._create_safe_folder_name(species_name, common_name)
+                        folder_name = self._create_safe_folder_name(species_name, common_name, japanese_name)
                 else:
                     folder_name = NO_DETECTION_FOLDER
 
@@ -159,14 +161,20 @@ class FileManager:
 
                     species_name = row.get('species', '') or ''
                     common_name = row.get('common_name', '') or ''
+                    japanese_name = (row.get('japanese_name') or '').strip()
+                    scientific_name = (row.get('scientific_name') or '').strip()
                     cached_date = (row.get('image_date') or '').strip() or None
+
+                    # 旧CSV（japanese_name 列なし）は scientific_name から動的解決
+                    if not japanese_name and scientific_name:
+                        japanese_name = get_translator().translate_species(scientific_name)
 
                     if (not species_name
                             or (SpeciesDetectorDirect.is_no_detection_label(species_name)
                                 and SpeciesDetectorDirect.is_no_detection_label(common_name))):
                         folder_name = NO_DETECTION_FOLDER
                     else:
-                        folder_name = self._create_safe_folder_name(species_name, common_name)
+                        folder_name = self._create_safe_folder_name(species_name, common_name, japanese_name)
 
                     # 出力フォルダの決定（日付サブフォルダ対応、CSV内日付を優先利用）
                     species_folder = self._resolve_target_folder(
@@ -246,17 +254,24 @@ class FileManager:
         rel_str = str(rel).replace(os.sep, '/')
         return rel_str if rel_str != folder_name else folder_name
 
-    def _create_safe_folder_name(self, species_name: str, common_name: str) -> str:
-        """安全なフォルダ名を作成"""
+    def _create_safe_folder_name(self, species_name: str, common_name: str,
+                                  japanese_name: str = '') -> str:
+        """安全なフォルダ名を作成。優先順位: 和名 → 英common_name → 学名のみ"""
         # 無効な文字を置換
         invalid_chars = '<>:"/\\|?*'
-        
-        # メインの名前を決定
-        if common_name and common_name != species_name:
-            main_name = f"{common_name}_{species_name}"
+
+        # メインの名前を決定（和名 > 英common_name の順で「表示名_学名」形式）
+        display_name = ''
+        if japanese_name and japanese_name != species_name:
+            display_name = japanese_name
+        elif common_name and common_name != species_name:
+            display_name = common_name
+
+        if display_name:
+            main_name = f"{display_name}_{species_name}"
         else:
             main_name = species_name
-        
+
         # 無効な文字を置換
         safe_name = main_name
         for char in invalid_chars:

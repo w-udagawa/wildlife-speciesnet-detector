@@ -8,13 +8,16 @@ from core.batch_processor import ProcessingStats
 from utils.csv_exporter import CSVExporter, NO_DETECTION_PIVOT_LABEL
 
 
-def _write_detection_csv(path: Path, rows: list[dict]) -> None:
+def _write_detection_csv(path: Path, rows: list[dict], include_japanese: bool = True) -> None:
     fieldnames = [
         "image_path", "image_name", "species", "scientific_name",
         "confidence", "category", "common_name", "timestamp"
     ]
+    if include_japanese:
+        # 一般名の直後（仕様上どこでも良いが、batch_processor の CSV_COLUMNS に近づける）
+        fieldnames.insert(fieldnames.index("common_name") + 1, "japanese_name")
     with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
@@ -49,20 +52,23 @@ class TestDailySpeciesPivot:
         detection_csv = tmp_path / "det.csv"
         _write_detection_csv(detection_csv, [
             {"image_path": str(src/"a.jpg"), "image_name": "a.jpg",
-             "species": "Corvus", "common_name": "ハシブトガラス",
-             "scientific_name": "Corvus", "confidence": "0.9",
+             "species": "Corvus macrorhynchos", "common_name": "large-billed crow",
+             "japanese_name": "ハシブトガラス",
+             "scientific_name": "Corvus macrorhynchos", "confidence": "0.9",
              "category": "bird", "timestamp": ""},
             {"image_path": str(src/"b.jpg"), "image_name": "b.jpg",
-             "species": "Corvus", "common_name": "ハシブトガラス",
-             "scientific_name": "Corvus", "confidence": "0.88",
+             "species": "Corvus macrorhynchos", "common_name": "large-billed crow",
+             "japanese_name": "ハシブトガラス",
+             "scientific_name": "Corvus macrorhynchos", "confidence": "0.88",
              "category": "bird", "timestamp": ""},
             {"image_path": str(src/"c.jpg"), "image_name": "c.jpg",
-             "species": "", "common_name": "",
+             "species": "", "common_name": "", "japanese_name": "",
              "scientific_name": "", "confidence": "0",
              "category": "", "timestamp": ""},
             {"image_path": str(src/"d.jpg"), "image_name": "d.jpg",
-             "species": "Corvus", "common_name": "ハシブトガラス",
-             "scientific_name": "Corvus", "confidence": "0.8",
+             "species": "Corvus macrorhynchos", "common_name": "large-billed crow",
+             "japanese_name": "ハシブトガラス",
+             "scientific_name": "Corvus macrorhynchos", "confidence": "0.8",
              "category": "bird", "timestamp": ""},
         ])
 
@@ -117,6 +123,50 @@ class TestDailySpeciesPivot:
 
         no_det = next(r for r in rows if r[0] == NO_DETECTION_PIVOT_LABEL)
         assert no_det[1] == "2"
+
+    def test_legacy_csv_without_japanese_column_resolves_dynamically(self, tmp_path: Path):
+        """旧バージョンのCSV（japanese_name 列なし）でも scientific_name から和名を解決"""
+        src = tmp_path / "src"
+        src.mkdir()
+        a = src / "a.jpg"; a.write_bytes(b"a"); _set_mtime(a, 2024, 5, 1)
+
+        det = tmp_path / "det.csv"
+        _write_detection_csv(det, [
+            {"image_path": str(a), "image_name": "a.jpg",
+             "species": "Corvus macrorhynchos", "common_name": "large-billed crow",
+             "scientific_name": "Corvus macrorhynchos", "confidence": "0.9",
+             "category": "bird", "timestamp": ""},
+        ], include_japanese=False)
+
+        exporter = CSVExporter(str(tmp_path / "out"))
+        pivot = Path(exporter.export_daily_species_pivot(str(det)))
+        rows = _read_pivot(pivot)
+
+        # シードJSONに登録された "Corvus macrorhynchos" → "ハシブトガラス" が動的解決される
+        labels = [r[0] for r in rows]
+        assert "ハシブトガラス" in labels
+
+    def test_unregistered_species_falls_back_to_english_common(self, tmp_path: Path):
+        """JSON未登録種は英語common_name → species の順でfallback"""
+        src = tmp_path / "src"
+        src.mkdir()
+        a = src / "a.jpg"; a.write_bytes(b"a"); _set_mtime(a, 2024, 5, 1)
+
+        det = tmp_path / "det.csv"
+        _write_detection_csv(det, [
+            {"image_path": str(a), "image_name": "a.jpg",
+             "species": "Foo bar", "common_name": "fictional foo",
+             "japanese_name": "",  # 未登録
+             "scientific_name": "Foo bar", "confidence": "0.9",
+             "category": "bird", "timestamp": ""},
+        ])
+
+        exporter = CSVExporter(str(tmp_path / "out"))
+        pivot = Path(exporter.export_daily_species_pivot(str(det)))
+        rows = _read_pivot(pivot)
+
+        labels = [r[0] for r in rows]
+        assert "fictional foo" in labels
 
     def test_unknown_date_sorted_last(self, tmp_path: Path):
         """取得できない日付のファイルは unknown-date 列として末尾"""

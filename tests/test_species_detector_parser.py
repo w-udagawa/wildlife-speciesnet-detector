@@ -24,6 +24,29 @@ class TestParsePredictionString:
         assert result["species_name"] == "Corvus macrorhynchos (ハシブトガラス)"
         assert result["scientific_name"] == "Corvus macrorhynchos"
         assert result["common_name"] == "ハシブトガラス"
+        # JSON 経由で和名も解決される
+        assert result["japanese_name"] == "ハシブトガラス"
+
+    def test_english_common_name_resolves_japanese_via_json(self, detector):
+        """SpeciesNet実機が返す英語common_nameでも和名が JSON から解決される"""
+        # 実機 SpeciesNet が返す英語 common_name の典型例
+        s = "uuid-real;aves;passeriformes;corvidae;corvus;macrorhynchos;large-billed crow"
+        result = detector._parse_prediction_string(s)
+        assert result["scientific_name"] == "Corvus macrorhynchos"
+        assert result["common_name"] == "large-billed crow"
+        # JSON シードに登録された和名が解決される
+        assert result["japanese_name"] == "ハシブトガラス"
+        # 表示名は「学名 (英名 / 和名)」併記
+        assert result["species_name"] == "Corvus macrorhynchos (large-billed crow / ハシブトガラス)"
+
+    def test_unregistered_species_yields_empty_japanese(self, detector):
+        """JSONに登録のない学名は japanese_name が空、species_name は学名(英名) のみ"""
+        s = "uuid-x;aves;x;y;foo;bar;fictional foo"
+        result = detector._parse_prediction_string(s)
+        assert result["scientific_name"] == "Foo bar"
+        assert result["common_name"] == "fictional foo"
+        assert result["japanese_name"] == ""
+        assert result["species_name"] == "Foo bar (fictional foo)"
 
     def test_mammal_category_mapping(self, detector):
         s = "uuid-2;mammalia;carnivora;felidae;felis;catus;イエネコ"

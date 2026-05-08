@@ -173,6 +173,7 @@ class SpeciesDetectorDirect:
                 'confidence': float(prediction_score),
                 'category': species_info['category'],
                 'common_name': species_info['common_name'],
+                'japanese_name': species_info['japanese_name'],
                 'bbox': self._extract_bbox_from_detections(prediction.get('detections', [])),
                 'source': prediction.get('prediction_source', 'classifier')
             }
@@ -216,6 +217,7 @@ class SpeciesDetectorDirect:
                 'scientific_name': '',
                 'category': 'no_detection',
                 'common_name': '',
+                'japanese_name': '',
             }
 
         # 学名の組立
@@ -228,10 +230,19 @@ class SpeciesDetectorDirect:
         else:
             sci_name = fallback or 'Unknown'
 
-        # 表示名: 「英語 (日本語)」形式。common_name が sci_name と同一/包含関係なら単独表示
+        # 和名の解決（Translator はモジュールロード時の循環を避けるためここで遅延 import）
+        from utils.japanese_names import get_translator
+        japanese_name = get_translator().translate_species(sci_name)
+
+        # 表示名: 「学名 (英名 / 和名)」形式。common_name や japanese_name が空 / 重複なら省略
         display_common = '' if self.is_no_detection_label(common_name) else common_name
+        display_parts = []
         if display_common and display_common.lower() != sci_name.lower():
-            species_name = f"{sci_name} ({display_common})"
+            display_parts.append(display_common)
+        if japanese_name and japanese_name != display_common:
+            display_parts.append(japanese_name)
+        if display_parts:
+            species_name = f"{sci_name} ({' / '.join(display_parts)})"
         else:
             species_name = sci_name
 
@@ -240,6 +251,7 @@ class SpeciesDetectorDirect:
             'scientific_name': sci_name,
             'category': category,
             'common_name': display_common,
+            'japanese_name': japanese_name,
         }
 
     def _parse_prediction_string(self, prediction_str: str) -> Dict[str, str]:
@@ -251,13 +263,15 @@ class SpeciesDetectorDirect:
                 'scientific_name': '',
                 'category': 'no_detection',
                 'common_name': '',
+                'japanese_name': '',
             }
 
         default = {
             'species_name': prediction_str,
             'scientific_name': prediction_str,
             'category': 'unknown',
-            'common_name': ''
+            'common_name': '',
+            'japanese_name': '',
         }
 
         if ';' not in prediction_str:

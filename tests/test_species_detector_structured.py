@@ -24,6 +24,20 @@ class TestExtractSpeciesInfo:
         assert info['species_name'] == 'Corvus macrorhynchos (ハシブトガラス)'
         assert info['scientific_name'] == 'Corvus macrorhynchos'
         assert info['common_name'] == 'ハシブトガラス'
+        assert info['japanese_name'] == 'ハシブトガラス'
+
+    def test_english_common_name_with_japanese_resolution(self, detector):
+        """SpeciesNet実機が返す英語common_nameを構造化キー経由で受け取った場合の和名解決"""
+        prediction = {
+            'class': 'aves',
+            'genus': 'Corvus',
+            'species': 'macrorhynchos',
+            'common_name': 'large-billed crow',
+        }
+        info = detector._extract_species_info(prediction)
+        assert info['common_name'] == 'large-billed crow'
+        assert info['japanese_name'] == 'ハシブトガラス'
+        assert info['species_name'] == 'Corvus macrorhynchos (large-billed crow / ハシブトガラス)'
 
     def test_falls_back_to_string_when_no_structured_keys(self, detector):
         prediction = {

@@ -10,6 +10,7 @@ Wildlife Detectorは、画像から野生生物（特に鳥類と哺乳類）を
 - **処理堅牢性**: 1万枚以上の大量連続処理向け強化（レジューム機能、EXIF撮影日のCSV保存、進捗コールバックのスロットリング、チャンク境界中間保存、パス長対策）
 - **配布ビルド**: Windows Embeddable Python 同梱のポータブル zip 生成（`scripts\build_portable.bat`）。受け取り手は Python インストール不要でダブルクリック起動
 - **Excel 互換 CSV**: 全 CSV 出力を UTF-8 BOM 付きに統一し、日本語共通名やピボット見出しが Excel で化けない
+- **和名表示**: SpeciesNet が返す英語 common_name を保ったまま、`utils/japanese_names.json` 経由で和名（japanese_name）を CSV に併記。カテゴリも「鳥類/哺乳類/...」と日本語化、振り分けフォルダ名も `ハシブトガラス_Corvus_macrorhynchos` 形式に
 
 ## 主な機能
 
@@ -172,11 +173,12 @@ SpeciesNet の `class` フィールドを以下のカテゴリにマッピング
 | image_path | 入力画像のフルパス |
 | image_name | 画像ファイル名 |
 | image_date | EXIF DateTimeOriginal → DateTimeDigitized → DateTime → mtime の順に解決した撮影日 (YYYY-MM-DD) |
-| species | 表示種名（`学名 (common_name)` 併記、未検出は空） |
+| species | 表示種名（`学名 (英名 / 和名)` 併記、未検出は空） |
 | scientific_name | 学名のみ |
 | confidence | 信頼度 (0.0-1.0) |
-| category | 表示カテゴリ (bird/mammal/reptile/.../no_detection) |
-| common_name | 一般名（日本語 common_name があればここに入る） |
+| category | 内部カテゴリ (bird/mammal/reptile/amphibian/fish/insect/no_detection)。詳細CSV/種リスト/サマリーでは表示時に「鳥類/哺乳類/…」と日本語化される |
+| common_name | SpeciesNet が返す英語 common_name (例: `large-billed crow`) |
+| japanese_name | `utils/japanese_names.json` で解決した和名 (例: `ハシブトガラス`)。未登録種は空欄 |
 | timestamp | 検出時刻 (ISO8601) |
 
 ## 自動ファイル振り分け機能
@@ -286,13 +288,13 @@ scripts\build_portable.bat
 
 ```
 dist\
-└── WildlifeDetector_v2.1.0_portable.zip   ← これを配布
+└── WildlifeDetector_v2.2.0_portable.zip   ← これを配布
 ```
 
 解凍後の構成：
 
 ```
-WildlifeDetector_v2.1.0_portable/
+WildlifeDetector_v2.2.0_portable/
 ├── WildlifeDetector.bat           ← ユーザーはこれをダブルクリック
 ├── WildlifeDetector-debug.bat     ← トラブル時のコンソール起動
 ├── README_ja.txt                  ← 配布向けの使い方・トラブル対処
@@ -302,7 +304,7 @@ WildlifeDetector_v2.1.0_portable/
 
 ### 配布
 
-1. `dist\WildlifeDetector_v2.1.0_portable.zip` を受け取り手に渡す（GitHub Releases / 社内ファイル共有 / OneDrive リンク等）
+1. `dist\WildlifeDetector_v2.2.0_portable.zip` を受け取り手に渡す（GitHub Releases / 社内ファイル共有 / OneDrive リンク等）
 2. 受け取った人は zip を任意のフォルダに解凍
 3. `WildlifeDetector.bat` をダブルクリックで起動
 

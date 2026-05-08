@@ -41,11 +41,11 @@ def _get_extract_image_date():
     from utils.image_meta import extract_image_date
     return extract_image_date
 
-# 結果CSVのカラム定義（image_date 列を含む最新バージョン）
+# 結果CSVのカラム定義（image_date / japanese_name 列を含む最新バージョン）
 CSV_COLUMNS = [
     'image_path', 'image_name', 'image_date',
     'species', 'scientific_name', 'confidence',
-    'category', 'common_name', 'timestamp'
+    'category', 'common_name', 'japanese_name', 'timestamp'
 ]
 
 # 進捗コールバックのスロットリング間隔
@@ -403,6 +403,7 @@ class BatchProcessor:
                             best.get('confidence', 0),
                             best.get('category', ''),
                             best.get('common_name', ''),
+                            best.get('japanese_name', ''),
                             result.timestamp.isoformat()
                         ])
                     else:
@@ -410,7 +411,7 @@ class BatchProcessor:
                             result.image_path,
                             result.image_name,
                             image_date,
-                            '', '', 0, '', '',
+                            '', '', 0, '', '', '',
                             result.timestamp.isoformat()
                         ])
 

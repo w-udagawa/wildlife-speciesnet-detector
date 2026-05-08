@@ -19,6 +19,26 @@ class TestSafeFolderName:
         assert "ハシブトガラス" in name
         assert "Corvus macrorhynchos" in name
 
+    def test_japanese_name_takes_precedence_over_common(self, tmp_path: Path):
+        """和名が指定されていれば英common_nameより優先される"""
+        fm = FileManager(str(tmp_path))
+        name = fm._create_safe_folder_name(
+            "Corvus macrorhynchos", "large-billed crow", "ハシブトガラス"
+        )
+        assert "ハシブトガラス" in name
+        assert "Corvus macrorhynchos" in name
+        # 英common_name はフォルダ名に出ない（和名が優先）
+        assert "large-billed crow" not in name
+
+    def test_falls_back_to_english_common_when_no_japanese(self, tmp_path: Path):
+        """和名未登録なら英common_nameを使う"""
+        fm = FileManager(str(tmp_path))
+        name = fm._create_safe_folder_name(
+            "Foo bar", "fictional foo", ""
+        )
+        assert "fictional foo" in name
+        assert "Foo bar" in name
+
     def test_empty_falls_back_to_default(self, tmp_path: Path):
         fm = FileManager(str(tmp_path))
         assert fm._create_safe_folder_name("   ", "") == "Unknown_Species"

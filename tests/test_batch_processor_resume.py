@@ -59,13 +59,13 @@ def tmp_images(tmp_path: Path) -> list[str]:
 
 class TestResume:
     def test_skips_already_processed_paths(self, tmp_path: Path, tmp_images):
-        # 事前に3枚処理済みCSVを作る
+        # 事前に3枚処理済みCSVを作る（新スキーマ: 10列）
         existing = tmp_path / "existing.csv"
         with open(existing, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow(CSV_COLUMNS)
             for p in tmp_images[:3]:
-                writer.writerow([p, Path(p).name, '2024-01-01', 'X', 'X', 0.9, 'bird', '', ''])
+                writer.writerow([p, Path(p).name, '2024-01-01', 'X', 'X', 0.9, 'bird', '', '', ''])
 
         processor = BatchProcessor(AppConfig())
         with patch('core.batch_processor.SpeciesDetector', lambda config: FakeDetector(config)):
@@ -83,6 +83,31 @@ class TestResume:
         with open(existing, encoding='utf-8-sig') as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 5
+
+    def test_resume_legacy_csv_without_japanese_column(self, tmp_path: Path, tmp_images):
+        """japanese_name 列が無い旧バージョンCSVからもレジュームできる"""
+        legacy_columns = [
+            'image_path', 'image_name', 'image_date',
+            'species', 'scientific_name', 'confidence',
+            'category', 'common_name', 'timestamp'
+        ]
+        existing = tmp_path / "legacy.csv"
+        with open(existing, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(legacy_columns)
+            for p in tmp_images[:2]:
+                writer.writerow([p, Path(p).name, '2024-01-01', 'X', 'X', 0.9, 'bird', '', ''])
+
+        processor = BatchProcessor(AppConfig())
+        with patch('core.batch_processor.SpeciesDetector', lambda config: FakeDetector(config)):
+            summary = processor.process_images(
+                tmp_images,
+                output_dir=str(tmp_path),
+                resume_from_csv=str(existing),
+            )
+        # 既存2件はスキップ、残り3件が処理される
+        assert summary['skipped'] == 2
+        assert summary['total_processed'] == 3
 
     def test_no_existing_csv_processes_all(self, tmp_path: Path, tmp_images):
         processor = BatchProcessor(AppConfig())

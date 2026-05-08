@@ -12,7 +12,7 @@ REM  使い方:
 REM    scripts\build_portable.bat
 REM
 REM  出力:
-REM    dist\WildlifeDetector_v2.1.0_portable.zip
+REM    dist\WildlifeDetector_v2.2.0_portable.zip
 REM
 REM  必要なツール: Windows 10/11 標準の curl, tar, powershell
 REM ============================================================
@@ -25,7 +25,7 @@ set "PY_VER=3.12.8"
 set "ARCH=amd64"
 set "BUILD_DIR=build\portable"
 set "CACHE_DIR=build\cache"
-set "DIST_NAME=WildlifeDetector_v2.1.0_portable"
+set "DIST_NAME=WildlifeDetector_v2.2.0_portable"
 set "EMBED_ZIP=%CACHE_DIR%\python-%PY_VER%-embed-%ARCH%.zip"
 set "GET_PIP=%CACHE_DIR%\get-pip.py"
 set "EMBED_URL=https://www.python.org/ftp/python/%PY_VER%/python-%PY_VER%-embed-%ARCH%.zip"
@@ -146,18 +146,24 @@ copy /Y scripts\portable\README_ja.txt              "%BUILD_DIR%\" > nul
 REM --- ビルド用の中間ファイルをクリーンアップ (zip に含めない) ---
 if exist "%BUILD_DIR%\requirements.trimmed.txt" del /q "%BUILD_DIR%\requirements.trimmed.txt"
 
-REM --- サイズ削減: site-packages 配下の __pycache__ と tests を削除 ---
-echo [13/15] サイズ削減 (__pycache__ / *.pyc / サブディレクトリの tests を削除)...
+REM Size reduction: delete only __pycache__ and *.pyc/.pyo with strict name match.
+REM  NOTE: previously '-Include tests,test' was used here but PowerShell's
+REM  -Recurse -Include behavior swept torch subpackages (_C, _dynamo, _inductor,
+REM  _vendor, _strobelight, etc) and broke detection in the distributed build.
+echo [13/15] Trimming __pycache__ and *.pyc / *.pyo ...
 powershell -NoProfile -Command ^
-  "Get-ChildItem -Path '%BUILD_DIR%\runtime\Lib\site-packages' -Recurse -Directory -Include '__pycache__','tests','test' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue;" ^
-  "Get-ChildItem -Path '%BUILD_DIR%\runtime\Lib\site-packages' -Recurse -Include '*.pyc','*.pyo' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue"
+  "Get-ChildItem -Path '%BUILD_DIR%\runtime\Lib\site-packages' -Recurse -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq '__pycache__' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue;" ^
+  "Get-ChildItem -Path '%BUILD_DIR%\runtime\Lib\site-packages' -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -ieq '.pyc' -or $_.Extension -ieq '.pyo' } | Remove-Item -Force -ErrorAction SilentlyContinue"
 
-REM --- スモークチェック: 必須 import が通るか ---
-echo [14/15] スモークチェック (必須パッケージの import 確認)...
-"%BUILD_DIR%\runtime\python.exe" -c "import speciesnet, PySide6, cv2, pandas, numpy, pkg_resources; print('SMOKE OK')"
+REM Smoke check: imports + actual torch op + speciesnet API presence.
+REM  torch._C and other binary submodules cannot be verified by pure imports
+REM  alone; torch.zeros() exercises _C. speciesnet symbol import catches a
+REM  broken install before we ship the zip.
+echo [14/15] Smoke check ^(imports + torch op + speciesnet API^) ...
+"%BUILD_DIR%\runtime\python.exe" "scripts\portable\build_smoke.py"
 if errorlevel 1 (
-    echo [ERROR] スモークチェック失敗: 必須パッケージの import に失敗しました
-    echo         上記メッセージを確認して requirements や _pth の設定を見直してください。
+    echo [ERROR] Smoke check failed: import / torch op / speciesnet API issue.
+    echo         Re-check requirements, _pth and the trim step before redistributing.
     exit /b 1
 )
 
@@ -194,13 +200,13 @@ echo.
 echo ============================================================
 echo   ビルド完了
 echo ============================================================
-echo   出力: dist\%DIST_NAME%.zip  (%ZIPSIZE_MB% MB)
+echo   出力: dist\%DIST_NAME%.zip  ^(%ZIPSIZE_MB% MB^)
 echo.
 echo   配布手順:
-echo     1) 上記 zip を受け取り手に渡す
-echo     2) 任意のフォルダに解凍
-echo     3) WildlifeDetector.bat をダブルクリック
-echo        (初回のみ SpeciesNet モデルを自動ダウンロード)
+echo     1. 上記 zip を受け取り手に渡す
+echo     2. 任意のフォルダに解凍
+echo     3. WildlifeDetector.bat をダブルクリック
+echo        ^(初回のみ SpeciesNet モデルを自動ダウンロード^)
 echo ============================================================
 
 endlocal
