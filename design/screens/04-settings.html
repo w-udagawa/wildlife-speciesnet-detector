@@ -1,0 +1,236 @@
+<!-- @dsCard group="Screens" name="設定" -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>設定 — Wildlife Detector デザイン案</title>
+<style>
+:root {
+  --brand-700: #245641;
+  --brand-600: #2E6B4F;
+  --brand-500: #3B8163;
+  --brand-100: #DFEDE4;
+  --brand-50:  #F0F6F2;
+  --paper:     #F6F5F1;
+  --card:      #FFFFFF;
+  --side:      #FBFAF8;
+  --ink:       #1C1B18;
+  --ink-2:     #52514E;
+  --ink-3:     #898781;
+  --line:      #E4E2DA;
+  --good:      #0CA30C;
+  --good-text: #006300;
+  --warn:      #FAB219;
+  --crit:      #D03B3B;
+  --bird:      #2A78D6;  --bird-bg:   #E7F0FB;
+  --mammal:    #EB6834;  --mammal-bg: #FCEBE3;
+  --other:     #1BAF7A;  --other-bg:  #E2F5EE;
+  --none-dot:  #898781;  --none-bg:   #EFEEEA;
+  --meter-track: #DCEAE1;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  background: #ECEBE6; color: var(--ink);
+  padding: 24px; font-size: 14px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.window {
+  max-width: 1240px; margin: 0 auto; background: var(--paper);
+  border: 1px solid rgba(11,11,11,0.10); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(28,27,24,0.14); overflow: hidden;
+}
+.titlebar {
+  height: 40px; display: flex; align-items: center; padding: 0 14px;
+  background: var(--card); border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-2); gap: 8px;
+}
+.titlebar .t-title { flex: 1; text-align: center; }
+.titlebar .t-btns { display: flex; gap: 14px; color: var(--ink-3); font-size: 11px; }
+.app { display: flex; min-height: 780px; align-items: stretch; }
+.sidebar {
+  width: 236px; flex: none; background: var(--side);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; padding: 20px 14px 16px;
+}
+.logo { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+.logo .mark {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--brand-600);
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.logo .mark svg { display: block; }
+.logo .name { font-weight: 600; font-size: 14px; line-height: 1.2; }
+.logo .ver { font-size: 11px; color: var(--ink-3); }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-label { font-size: 11px; color: var(--ink-3); padding: 10px 10px 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: 8px; color: var(--ink-2); font-size: 13px; position: relative;
+}
+.nav-item .num {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  border: 1.5px solid var(--ink-3); color: var(--ink-3);
+  font-size: 11.5px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-item.active { background: var(--brand-100); color: var(--brand-700); font-weight: 600; }
+.nav-item.active .num { border-color: var(--brand-600); background: var(--brand-600); color: #fff; }
+.nav-item.done .num { border-color: var(--brand-600); color: var(--brand-600); }
+.nav-item.plain { padding-left: 12px; }
+.sidebar .spacer { flex: 1; }
+.side-status {
+  border-top: 1px solid var(--line); padding: 12px 8px 0; font-size: 11.5px;
+  color: var(--ink-2); display: flex; flex-direction: column; gap: 6px;
+}
+.side-status .row { display: flex; align-items: center; gap: 7px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot.ok { background: var(--good); }
+.main { flex: 1; padding: 26px 32px 32px; overflow: auto; min-width: 0; }
+.page-h { margin-bottom: 18px; }
+.page-h h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }
+.page-h p { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 20px; margin-bottom: 16px;
+}
+.card h2 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border-radius: 8px;
+  padding: 9px 16px; font-size: 13.5px; font-weight: 600; border: 1px solid transparent;
+  cursor: default; white-space: nowrap;
+}
+.btn-primary { background: var(--brand-600); color: #fff; }
+.btn-secondary { background: var(--card); color: var(--ink); border-color: var(--line); }
+.btn-ghost { background: transparent; color: var(--brand-700); }
+.btn-danger { background: var(--card); color: var(--crit); border-color: #EBC5C5; }
+.btn-lg { padding: 12px 26px; font-size: 15px; border-radius: 10px; }
+.btn[disabled] { opacity: 0.45; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+  padding: 2.5px 10px 2.5px 8px; font-size: 12px; font-weight: 500; color: var(--ink);
+}
+.chip .dot { width: 8px; height: 8px; }
+.chip.bird   { background: var(--bird-bg); }   .chip.bird .dot   { background: var(--bird); }
+.chip.mammal { background: var(--mammal-bg); } .chip.mammal .dot { background: var(--mammal); }
+.chip.other  { background: var(--other-bg); }  .chip.other .dot  { background: var(--other); }
+.chip.none   { background: var(--none-bg); color: var(--ink-2); } .chip.none .dot { background: var(--none-dot); }
+.toggle { display: inline-flex; width: 36px; height: 20px; border-radius: 999px; background: var(--brand-600); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.toggle.off { background: #CFCDC4; }
+.toggle.off::after { right: auto; left: 2px; }
+.opt-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 2px; }
+.opt-row + .opt-row { border-top: 1px solid var(--line); }
+.opt-row .opt-t { font-size: 13.5px; }
+.opt-row .opt-d { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+}
+.stat .s-label { font-size: 12px; color: var(--ink-2); }
+.stat .s-value { font-size: 26px; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+.stat .s-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+.meter { height: 6px; border-radius: 3px; background: var(--meter-track); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 3px; background: var(--brand-600); }
+table.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  text-align: left; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
+  padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.tbl td { font-size: 13px; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl .num { font-variant-numeric: tabular-nums; }
+.tbl .sci { color: var(--ink-3); font-style: italic; font-size: 12px; }
+.tbl .jp { font-weight: 600; }
+.tbl .en { color: var(--ink-2); font-size: 12px; }
+.foot-note {
+  max-width: 1240px; margin: 14px auto 0; font-size: 12.5px; color: var(--ink-2);
+  display: flex; flex-direction: column; gap: 4px; padding: 0 4px;
+}
+.foot-note b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="t-btns">—&nbsp;&nbsp;▢&nbsp;&nbsp;✕</div>
+    <div class="t-title">Wildlife Detector — 野生生物検出</div>
+    <div class="t-btns" style="visibility:hidden">—&nbsp;&nbsp;▢&nbsp;&nbsp;✕</div>
+  </div>
+  <div class="app">
+
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M20 4C12 4 5.5 8.5 5.5 16c0 1.6.3 2.9.8 4 .3-2.7 1.6-6.8 5.2-10-2 3.4-3.9 8-3.9 12 .9.4 2 .6 3.2.6 7 0 9.2-7.3 9.2-18.6Z" fill="#fff"/></svg></div>
+      <div><div class="name">Wildlife Detector</div><div class="ver">v2.1 · SpeciesNet</div></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-label">ワークフロー</div>
+      <div class="nav-item"><span class="num">1</span>画像の選択</div>
+      <div class="nav-item"><span class="num">2</span>検出処理</div>
+      <div class="nav-item"><span class="num">3</span>結果</div>
+      <div class="nav-label">その他</div>
+      <div class="nav-item plain active">⚙&nbsp; 設定</div>
+    </nav>
+    <div class="spacer"></div>
+    <div class="side-status">
+      <div class="row"><span class="dot ok"></span>SpeciesNet v4.0.1a 読み込み済み</div>
+      <div class="row"><span class="dot ok"></span>GPU: NVIDIA RTX 4060 使用中</div>
+    </div>
+  </aside>
+    <main class="main">
+
+      <div class="page-h">
+        <h1>設定</h1>
+        <p>検出精度とパフォーマンスの設定です。変更は自動的に保存されます。</p>
+      </div>
+
+      <div class="card">
+        <h2>検出設定</h2>
+        <div class="opt-row">
+          <div><div class="opt-t">信頼度閾値</div><div class="opt-d">この値未満の検出は「未検出」として扱います</div></div>
+          <div style="display:flex; align-items:center; gap:12px; width:280px;">
+            <div class="meter" style="flex:1; height:4px;"><i style="width:50%"></i></div>
+            <span style="font-size:13px; font-variant-numeric:tabular-nums; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:4px 10px;">0.50</span>
+          </div>
+        </div>
+        <div class="opt-row">
+          <div><div class="opt-t">地域フィルター</div><div class="opt-d">指定した地域に生息する種を優先します</div></div>
+          <span style="font-size:13px; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:6px 12px;">🇯🇵 日本 (JPN) ▾</span>
+        </div>
+        <div class="opt-row">
+          <div><div class="opt-t">バッチサイズ</div><div class="opt-d">1回にまとめて解析する画像数（大きいほど高速・高メモリ）</div></div>
+          <span style="font-size:13px; font-variant-numeric:tabular-nums; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:6px 14px;">32 ▴▾</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>パフォーマンス</h2>
+        <div class="opt-row">
+          <div><div class="opt-t">GPUを使用</div><div class="opt-d">NVIDIA RTX 4060 を検出しました — 約8倍高速化</div></div>
+          <span class="toggle"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>外観</h2>
+        <div class="opt-row">
+          <div><div class="opt-t">テーマ</div><div class="opt-d">ライト / ダークを選択（OSに合わせる設定も可）</div></div>
+          <div style="display:flex; gap:8px;">
+            <span style="font-size:12.5px; border:2px solid var(--brand-600); border-radius:8px; padding:5px 14px; font-weight:600; color:var(--brand-700); background:var(--brand-50);">☀ ライト</span>
+            <span style="font-size:12.5px; border:1px solid var(--line); border-radius:8px; padding:6px 14px; color:var(--ink-2);">🌙 ダーク</span>
+            <span style="font-size:12.5px; border:1px solid var(--line); border-radius:8px; padding:6px 14px; color:var(--ink-2);">🖥 自動</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <span class="btn btn-ghost">デフォルトに戻す</span>
+      </div>
+
+    </main>
+  </div>
+</div>
+<div class="foot-note"><div><b>提案:</b> 設定は行単位（名前＋説明＋コントロール）のリスト形式に。各項目に「なぜ・どうなる」の説明を必ず添えます。</div><div>GPU設定は検出したハードウェア名を表示し、効果（約8倍高速化）を明示。</div><div>テーマはライト/ダーク/自動の3択に整理（現行の3テーマからの変更提案）。</div></div>
+</body>
+</html>

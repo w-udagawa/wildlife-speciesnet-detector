@@ -1,0 +1,236 @@
+<!-- @dsCard group="Foundations" name="カラー・タイポグラフィ・部品" -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>デザイントークン — Wildlife Detector デザイン案</title>
+<style>
+:root {
+  --brand-700: #245641;
+  --brand-600: #2E6B4F;
+  --brand-500: #3B8163;
+  --brand-100: #DFEDE4;
+  --brand-50:  #F0F6F2;
+  --paper:     #F6F5F1;
+  --card:      #FFFFFF;
+  --side:      #FBFAF8;
+  --ink:       #1C1B18;
+  --ink-2:     #52514E;
+  --ink-3:     #898781;
+  --line:      #E4E2DA;
+  --good:      #0CA30C;
+  --good-text: #006300;
+  --warn:      #FAB219;
+  --crit:      #D03B3B;
+  --bird:      #2A78D6;  --bird-bg:   #E7F0FB;
+  --mammal:    #EB6834;  --mammal-bg: #FCEBE3;
+  --other:     #1BAF7A;  --other-bg:  #E2F5EE;
+  --none-dot:  #898781;  --none-bg:   #EFEEEA;
+  --meter-track: #DCEAE1;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  background: #ECEBE6; color: var(--ink);
+  padding: 24px; font-size: 14px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.window {
+  max-width: 1240px; margin: 0 auto; background: var(--paper);
+  border: 1px solid rgba(11,11,11,0.10); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(28,27,24,0.14); overflow: hidden;
+}
+.titlebar {
+  height: 40px; display: flex; align-items: center; padding: 0 14px;
+  background: var(--card); border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-2); gap: 8px;
+}
+.titlebar .t-title { flex: 1; text-align: center; }
+.titlebar .t-btns { display: flex; gap: 14px; color: var(--ink-3); font-size: 11px; }
+.app { display: flex; min-height: 780px; align-items: stretch; }
+.sidebar {
+  width: 236px; flex: none; background: var(--side);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; padding: 20px 14px 16px;
+}
+.logo { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+.logo .mark {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--brand-600);
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.logo .mark svg { display: block; }
+.logo .name { font-weight: 600; font-size: 14px; line-height: 1.2; }
+.logo .ver { font-size: 11px; color: var(--ink-3); }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-label { font-size: 11px; color: var(--ink-3); padding: 10px 10px 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: 8px; color: var(--ink-2); font-size: 13px; position: relative;
+}
+.nav-item .num {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  border: 1.5px solid var(--ink-3); color: var(--ink-3);
+  font-size: 11.5px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-item.active { background: var(--brand-100); color: var(--brand-700); font-weight: 600; }
+.nav-item.active .num { border-color: var(--brand-600); background: var(--brand-600); color: #fff; }
+.nav-item.done .num { border-color: var(--brand-600); color: var(--brand-600); }
+.nav-item.plain { padding-left: 12px; }
+.sidebar .spacer { flex: 1; }
+.side-status {
+  border-top: 1px solid var(--line); padding: 12px 8px 0; font-size: 11.5px;
+  color: var(--ink-2); display: flex; flex-direction: column; gap: 6px;
+}
+.side-status .row { display: flex; align-items: center; gap: 7px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot.ok { background: var(--good); }
+.main { flex: 1; padding: 26px 32px 32px; overflow: auto; min-width: 0; }
+.page-h { margin-bottom: 18px; }
+.page-h h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }
+.page-h p { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 20px; margin-bottom: 16px;
+}
+.card h2 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border-radius: 8px;
+  padding: 9px 16px; font-size: 13.5px; font-weight: 600; border: 1px solid transparent;
+  cursor: default; white-space: nowrap;
+}
+.btn-primary { background: var(--brand-600); color: #fff; }
+.btn-secondary { background: var(--card); color: var(--ink); border-color: var(--line); }
+.btn-ghost { background: transparent; color: var(--brand-700); }
+.btn-danger { background: var(--card); color: var(--crit); border-color: #EBC5C5; }
+.btn-lg { padding: 12px 26px; font-size: 15px; border-radius: 10px; }
+.btn[disabled] { opacity: 0.45; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+  padding: 2.5px 10px 2.5px 8px; font-size: 12px; font-weight: 500; color: var(--ink);
+}
+.chip .dot { width: 8px; height: 8px; }
+.chip.bird   { background: var(--bird-bg); }   .chip.bird .dot   { background: var(--bird); }
+.chip.mammal { background: var(--mammal-bg); } .chip.mammal .dot { background: var(--mammal); }
+.chip.other  { background: var(--other-bg); }  .chip.other .dot  { background: var(--other); }
+.chip.none   { background: var(--none-bg); color: var(--ink-2); } .chip.none .dot { background: var(--none-dot); }
+.toggle { display: inline-flex; width: 36px; height: 20px; border-radius: 999px; background: var(--brand-600); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.toggle.off { background: #CFCDC4; }
+.toggle.off::after { right: auto; left: 2px; }
+.opt-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 2px; }
+.opt-row + .opt-row { border-top: 1px solid var(--line); }
+.opt-row .opt-t { font-size: 13.5px; }
+.opt-row .opt-d { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+}
+.stat .s-label { font-size: 12px; color: var(--ink-2); }
+.stat .s-value { font-size: 26px; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+.stat .s-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+.meter { height: 6px; border-radius: 3px; background: var(--meter-track); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 3px; background: var(--brand-600); }
+table.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  text-align: left; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
+  padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.tbl td { font-size: 13px; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl .num { font-variant-numeric: tabular-nums; }
+.tbl .sci { color: var(--ink-3); font-style: italic; font-size: 12px; }
+.tbl .jp { font-weight: 600; }
+.tbl .en { color: var(--ink-2); font-size: 12px; }
+.foot-note {
+  max-width: 1240px; margin: 14px auto 0; font-size: 12.5px; color: var(--ink-2);
+  display: flex; flex-direction: column; gap: 4px; padding: 0 4px;
+}
+.foot-note b { color: var(--ink); font-weight: 600; }
+
+.sw-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+.sw { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--card); }
+.sw .c { height:52px; }
+.sw .m { padding:7px 10px; font-size:11px; line-height:1.45; }
+.sw .m b { display:block; font-size:11.5px; }
+.type-row { display:flex; align-items:baseline; gap:16px; padding:8px 0; border-bottom:1px solid var(--line); }
+.type-row:last-child { border-bottom:none; }
+.type-row .t-meta { width:200px; flex:none; font-size:11.5px; color:var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="window" style="min-height:0;">
+  <div class="titlebar"><div class="t-title">Wildlife Detector — デザイントークン</div></div>
+  <div style="padding:28px 32px; background:var(--paper);">
+
+    <div class="page-h"><h1>カラーパレット</h1><p>フィールドグリーンを基調に、紙のような温かみのあるニュートラルを合わせています。</p></div>
+    <div class="card">
+      <h2>ブランド / サーフェス / インク</h2>
+      <div class="sw-grid">
+        <div class="sw"><div class="c" style="background:#2E6B4F"></div><div class="m"><b>brand-600</b>#2E6B4F · 主要アクション</div></div>
+        <div class="sw"><div class="c" style="background:#245641"></div><div class="m"><b>brand-700</b>#245641 · ホバー/強調文字</div></div>
+        <div class="sw"><div class="c" style="background:#DFEDE4"></div><div class="m"><b>brand-100</b>#DFEDE4 · 選択状態の背景</div></div>
+        <div class="sw"><div class="c" style="background:#F6F5F1"></div><div class="m"><b>paper</b>#F6F5F1 · ウィンドウ背景</div></div>
+        <div class="sw"><div class="c" style="background:#FFFFFF"></div><div class="m"><b>card</b>#FFFFFF · カード背景</div></div>
+        <div class="sw"><div class="c" style="background:#E4E2DA"></div><div class="m"><b>line</b>#E4E2DA · 罫線（ヘアライン）</div></div>
+        <div class="sw"><div class="c" style="background:#1C1B18"></div><div class="m"><b>ink</b>#1C1B18 · 本文</div></div>
+        <div class="sw"><div class="c" style="background:#52514E"></div><div class="m"><b>ink-2</b>#52514E · 補助テキスト</div></div>
+        <div class="sw"><div class="c" style="background:#898781"></div><div class="m"><b>ink-3</b>#898781 · 弱いテキスト/軸</div></div>
+        <div class="sw"><div class="c" style="background:#0CA30C"></div><div class="m"><b>good</b>#0CA30C · 成功</div></div>
+        <div class="sw"><div class="c" style="background:#FAB219"></div><div class="m"><b>warning</b>#FAB219 · 警告（アイコン併用）</div></div>
+        <div class="sw"><div class="c" style="background:#D03B3B"></div><div class="m"><b>critical</b>#D03B3B · エラー/停止</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>カテゴリカラー（CVD検証済み · チップは常にラベル併記）</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <span class="chip bird"><span class="dot"></span>鳥類 #2A78D6</span>
+        <span class="chip mammal"><span class="dot"></span>哺乳類 #EB6834</span>
+        <span class="chip other"><span class="dot"></span>その他（爬虫類等） #1BAF7A</span>
+        <span class="chip none"><span class="dot"></span>未検出 #898781</span>
+      </div>
+      <p style="font-size:12px; color:var(--ink-3); margin-top:10px;">validate_palette.js: 隣接ペア最小 ΔE 25.0（目標 ≥12）で合格。テキストは常にインク色、色はドットが担う。</p>
+    </div>
+
+    <div class="card">
+      <h2>タイポグラフィ</h2>
+      <div class="type-row"><div class="t-meta">画面タイトル · 20px / 600</div><div style="font-size:20px; font-weight:600;">結果</div></div>
+      <div class="type-row"><div class="t-meta">ヒーロー数値 · 48px / 600</div><div style="font-size:48px; font-weight:600; letter-spacing:-0.02em;">62%</div></div>
+      <div class="type-row"><div class="t-meta">統計値 · 26px / 600</div><div style="font-size:26px; font-weight:600;">12,480</div></div>
+      <div class="type-row"><div class="t-meta">カード見出し · 14px / 600</div><div style="font-size:14px; font-weight:600;">検出結果詳細</div></div>
+      <div class="type-row"><div class="t-meta">本文 · 13.5px / 400</div><div style="font-size:13.5px;">画像から野生生物を自動検出します。ハシブトガラス (Corvus macrorhynchos)</div></div>
+      <div class="type-row"><div class="t-meta">補助 · 12px / ink-3</div><div style="font-size:12px; color:var(--ink-3);">EXIF撮影日を使用（種別フォルダ配下） · 表の数値は tabular-nums</div></div>
+      <p style="font-size:12px; color:var(--ink-3); margin-top:10px;">フォント: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", system-ui — Qt では QFont フォールバックで同等指定。</p>
+    </div>
+
+    <div class="card">
+      <h2>部品</h2>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span class="btn btn-primary">検出処理を開始 →</span>
+        <span class="btn btn-secondary">フォルダを選択</span>
+        <span class="btn btn-ghost">デフォルトに戻す</span>
+        <span class="btn btn-danger">⏸ 停止</span>
+        <span class="btn btn-primary" disabled>無効状態</span>
+        <span class="toggle"></span><span class="toggle off"></span>
+      </div>
+      <div style="display:flex; gap:16px; margin-top:18px; align-items:center;">
+        <div style="width:220px;"><div style="font-size:12px; color:var(--ink-2); margin-bottom:5px;">信頼度メーター（0.87）</div>
+          <div class="meter"><i style="width:87%"></i></div></div>
+        <div class="stat" style="width:180px;"><div class="s-label">検出種数</div><div class="s-value">42</div><div class="s-sub">鳥類 26 · 哺乳類 14</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ダークモード（次段階の案）</h2>
+      <p style="font-size:12.5px; color:var(--ink-2);">サーフェス #1A1A19 / ページ #0D0D0D、ブランドは明度を上げた #3B8163 系、カテゴリ色はダーク用ステップ（鳥類 #3987E5 / 哺乳類 #D95926 / その他 #199E70）に差し替え。単純な色反転ではなくダーク面で再検証したステップを採用します。</p>
+    </div>
+
+  </div>
+</div>
+<div class="foot-note">
+  <div><b>使い方:</b> このトークンを PySide6 の QSS（themes.py）に変数として落とし込みます。まず方向性への合意を取ってから実装に進みます。</div>
+</div>
+</body>
+</html>
