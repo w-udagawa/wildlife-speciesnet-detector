@@ -17,7 +17,7 @@ sys.path.insert(0, str(app_root))
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
     from PySide6.QtCore import Qt, QTimer
-    from PySide6.QtGui import QPixmap, QFont
+    from PySide6.QtGui import QPixmap, QFont, QColor
 except ImportError:
     print("エラー: PySide6がインストールされていません")
     print("次のコマンドでインストールしてください:")
@@ -120,7 +120,7 @@ class WildlifeDetectorApp:
         # 簡単なスプラッシュスクリーンを作成
         # 実際のアプリケーションでは画像ファイルを使用
         splash_pix = QPixmap(400, 300)
-        splash_pix.fill(Qt.darkBlue)
+        splash_pix.fill(QColor("#2E6B4F"))
         
         splash = QSplashScreen(splash_pix)
         splash.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.SplashScreen)
